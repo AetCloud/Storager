@@ -1,2 +1,2 @@
-# AetSQL
-A small side project for creating a somewhat dependable database.
+# DataStorage
+Git repo for data storage and what not.
