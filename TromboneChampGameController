@@ -1,0 +1,3962 @@
+// Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
+// GameController
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
+using Newtonsoft.Json;
+using UnityEngine;
+using UnityEngine.Audio;
+using UnityEngine.Networking;
+using UnityEngine.PostProcessing;
+using UnityEngine.Scripting;
+using UnityEngine.UI;
+using UnityEngine.Video;
+
+public class GameController : MonoBehaviour
+{
+	private enum track_status
+	{
+		waiting_to_start,
+		playing,
+		ended
+	}
+
+	private struct noteendeffect
+	{
+		public GameObject noteeffect_obj;
+
+		public RectTransform noteeffect_rect;
+
+		public GameObject burst_obj;
+
+		public Image burst_img;
+
+		public CanvasGroup burst_canvasg;
+
+		public ParticleSystem burst_particles;
+
+		public GameObject drops_obj;
+
+		public CanvasGroup drops_canvasg;
+
+		public GameObject combotext_obj;
+
+		public RectTransform combotext_rect;
+
+		public Text combotext_txt_front;
+
+		public Text combotext_txt_shadow;
+	}
+
+	public struct loaded_gameplay_settings
+	{
+		public bool show_calibration_screen;
+
+		public bool multiple_keys_mute;
+
+		public float timing_adjustment;
+
+		public int mouse_movementmode;
+
+		public int mouse_controldirection;
+
+		public float mouse_sensitivity;
+
+		public float mouse_smoothing;
+
+		public int scroll_mode;
+
+		public bool acc_autotoot;
+
+		public bool acc_reverse_tootinput;
+
+		public bool disable_mouse_tooting;
+	}
+
+	[Header("Global Toggles")]
+	public bool devmode;
+
+	public bool custom_level;
+
+	public string track_to_test = "";
+
+	public bool leveleditor;
+
+	public bool track_is_pausable = true;
+
+	private float latency_offset;
+
+	private bool smooth_scrolling = true;
+
+	private float smooth_scrolling_move_mult = 1f;
+
+	private float smooth_scrolling_mod_mult = 1f;
+
+	public AudioMixer audmix;
+
+	public AudioMixerGroup audmix_bgmus;
+
+	public AudioMixerGroup audmix_bgmus_pitchshifted;
+
+	public GameObject[] playermodels;
+
+	private int puppetnum;
+
+	private int textureindex = 3;
+
+	public int soundset;
+
+	private bool level_finished;
+
+	private bool readytoplay;
+
+	private List<KeyCode> toot_keys = new List<KeyCode>();
+
+	private int num_buttons_held_last_frame;
+
+	private int last_input_hash;
+
+	public bool controllermode;
+
+	public bool freeplay;
+
+	[SerializeField]
+	private GameObject backbtn;
+
+	[SerializeField]
+	private GameObject editorcanvas;
+
+	private bool playingineditor;
+
+	private int editornoteindex;
+
+	private float editorposition;
+
+	private float editorlength = 0.25f;
+
+	private float editorcopySTART;
+
+	private float editorcopyEND;
+
+	private float editorcopyPASTE;
+
+	private float noteoffset = 0.05f;
+
+	private float levelendpoint;
+
+	private float levelendtime;
+
+	private int lengthindex = 3;
+
+	[SerializeField]
+	private Text editorpostext;
+
+	[SerializeField]
+	private Text editorlengthtext;
+
+	[SerializeField]
+	private Text editorspacingtext;
+
+	[SerializeField]
+	private Text editortempotext;
+
+	[SerializeField]
+	private Text editortsigtext;
+
+	[SerializeField]
+	private Text editorendpostext;
+
+	[SerializeField]
+	private float[] startvals = new float[2];
+
+	[SerializeField]
+	private float[] endvals = new float[2];
+
+	[SerializeField]
+	private int enterindex;
+
+	[SerializeField]
+	private InputField levelnamefield;
+
+	[SerializeField]
+	private InputField col_r_1;
+
+	[SerializeField]
+	private InputField col_g_1;
+
+	[SerializeField]
+	private InputField col_b_1;
+
+	[SerializeField]
+	private InputField col_r_2;
+
+	[SerializeField]
+	private InputField col_g_2;
+
+	[SerializeField]
+	private InputField col_b_2;
+
+	private bool autoplay;
+
+	[SerializeField]
+	private Text autoplaytxt;
+
+	public bool paused;
+
+	public bool quitting;
+
+	public bool retrying;
+
+	public GameObject pausecanvas;
+
+	public PauseCanvasController pausecontroller;
+
+	public GameObject curtains;
+
+	private CurtainController curtainc;
+
+	public GameObject pointer;
+
+	public Image pointerimg;
+
+	public CanvasGroup pointerglow;
+
+	private int pointercolorindex;
+
+	private bool flipscheme;
+
+	[SerializeField]
+	private ParticleSystem solo_particles;
+
+	public GameObject topbreath;
+
+	public GameObject bottombreath;
+
+	private RectTransform topbreathr;
+
+	private RectTransform bottombreathr;
+
+	public RectTransform breathglow;
+
+	private float breathcounter;
+
+	private bool outofbreath;
+
+	private float breath_onscreenpos;
+
+	private float breath_offscreenpos;
+
+	public GameObject leftbounds;
+
+	public GameObject leftboundsglow;
+
+	private RectTransform pointerrect;
+
+	public GameObject soundSets;
+
+	private AudioRefs audiorefs;
+
+	public SFXRefs sfxrefs;
+
+	public Text songtitle;
+
+	public Text songtitleshadow;
+
+	public GameObject notelinesholder;
+
+	private GameObject[] notelines = new GameObject[15];
+
+	private float[] notelinepos = new float[15];
+
+	public GameObject noteparticles;
+
+	private RectTransform noteparticlesrect;
+
+	private int noteparticles_index;
+
+	public Sprite[] noteparticle_images = new Sprite[2];
+
+	private int defaultnotelength = 240;
+
+	private int numbeatlines = 6;
+
+	private int beatstoshow = 20;
+
+	public GameObject beatline;
+
+	private int beatlineindex;
+
+	private float maxbeatlinex;
+
+	private RectTransform[] allbeatlines = new RectTransform[12];
+
+	private RectTransform[] alleditorbeatlines = new RectTransform[500];
+
+	[HideInInspector]
+	public float[] note_c_start = new float[3] { 1f, 1f, 1f };
+
+	[HideInInspector]
+	public float[] note_c_end = new float[3] { 1f, 1f, 1f };
+
+	public GameObject noteholder;
+
+	private RectTransform noteholderr;
+
+	public GameObject lyricsholder;
+
+	[SerializeField]
+	private GameObject singlenote;
+
+	[SerializeField]
+	private GameObject single_improvzone;
+
+	[SerializeField]
+	private GameObject singlelyric;
+
+	[SerializeField]
+	private GameObject singlebg;
+
+	private List<float[]> leveldata = new List<float[]>();
+
+	private List<GameObject> improv_zone_objects = new List<GameObject>();
+
+	private List<float[]> improv_zones = new List<float[]>();
+
+	private List<float[]> improv_zone_data = new List<float[]>();
+
+	private int current_improv_zone;
+
+	private bool improv_zone_active;
+
+	private bool played_during_improv_zone;
+
+	private GameObject improv_zone_to_hide;
+
+	[SerializeField]
+	private GameObject improv_zone_text;
+
+	private List<GameObject> alllyrics = new List<GameObject>();
+
+	private List<RectTransform> alllyrics_rects = new List<RectTransform>();
+
+	private List<float[]> lyricdata_pos = new List<float[]>();
+
+	private List<string> lyricdata_txt = new List<string>();
+
+	private string editorlyrictxt = "";
+
+	private bool enteringlyrics;
+
+	private int lyric_occlusion_count = 14;
+
+	private List<float[]> bgdata = new List<float[]>();
+
+	private List<GameObject> bgobjs = new List<GameObject>();
+
+	private int bgindex;
+
+	public GameObject bgholder;
+
+	public BGController bgcontroller;
+
+	public GameObject custombg_prefab;
+
+	private VideoPlayer custombg_video;
+
+	private float tempo = 40f;
+
+	private float resync_timer;
+
+	private bool beatless;
+
+	private float tempotimer;
+
+	private float tempotimerdot;
+
+	private int beatnum = 1;
+
+	private int beatnumdot = 1;
+
+	private int beatspermeasure = 2;
+
+	private int timesigcount = 1;
+
+	private double trackmovemult = 1.0;
+
+	public GameObject musicref;
+
+	public AudioSource musictrack;
+
+	private double musictrack_timeelapsed;
+
+	private float musictrack_cliplength = 9999f;
+
+	private int levelnotesize = 20;
+
+	private List<GameObject> allnotes = new List<GameObject>();
+
+	private List<float[]> allnotevals = new List<float[]>();
+
+	private int currentnoteindex;
+
+	private float currentnotestart;
+
+	private float currentnoteend;
+
+	private float currentnotestarty;
+
+	private float currentnoteendy;
+
+	private float currentnotepshift;
+
+	private float currentnotetimestamp;
+
+	private bool noteactive;
+
+	private float notescoreaverage;
+
+	private float notescoresamples;
+
+	private float notescoretotal;
+
+	private float notestartpos;
+
+	public AudioSource currentnotesound;
+
+	private AudioClipsTromb trombclips;
+
+	private float trombvol_default;
+
+	private float trombvol_current;
+
+	private bool notebuttonpressed;
+
+	private float mousemult = 1.3f;
+
+	private float mouse_rel_pos = 0.5f;
+
+	private float vbounds = 165f;
+
+	private float outerbuffer = 15f;
+
+	private float zeroxpos = 60f;
+
+	private float vsensitivity = -350f;
+
+	private float vibratoamt;
+
+	public GameObject cameramodelparent;
+
+	public GameObject modelparent;
+
+	private GameObject puppet_human;
+
+	private HumanPuppetController puppet_humanc;
+
+	private bool noteplaying;
+
+	private bool released_button_between_notes = true;
+
+	private bool force_no_gap_gameobject_to_appear;
+
+	private bool released_during_timing_window;
+
+	private float last_release_timestamp;
+
+	private float release_threshold = 0.16f;
+
+	private float breathmultiplier = 1f;
+
+	public PostProcessingProfile gameplayppp;
+
+	public RainbowEffect rainbowcontroller;
+
+	public Button ui_savebtn;
+
+	public Button ui_loadbtn;
+
+	public Button ui_midibtn;
+
+	public Text ui_score;
+
+	public Text ui_score_shadow;
+
+	private int multiplier;
+
+	private int max_multiplier = 10;
+
+	public Text highestcombo;
+
+	public Text highestcomboshad;
+
+	public GameObject highestcomboobj;
+
+	private string totaltracktimestring = "0:00";
+
+	public Text timeelapsed;
+
+	public Text timeelapsed_shad;
+
+	public GameObject timeelapsedobj;
+
+	[SerializeField]
+	private GameObject time_bar_full_obj;
+
+	[SerializeField]
+	private Transform time_bar_transform;
+
+	[SerializeField]
+	private GameObject[] time_bar_ticks;
+
+	[SerializeField]
+	private RectTransform time_bar_nub;
+
+	private float next_time_bar_goal = 0.25f;
+
+	private int time_bar_index;
+
+	private int highestcombo_level;
+
+	private int highestcombocounter;
+
+	private int currentscore;
+
+	private int totalscore;
+
+	private int maxlevelscore;
+
+	private float scorecounter;
+
+	private int previous_high_score;
+
+	private bool previous_high_score_surpassed;
+
+	[SerializeField]
+	private GameObject previous_high_gameobject;
+
+	[SerializeField]
+	private GameObject popuptextobj;
+
+	[SerializeField]
+	private GameObject multtextobj;
+
+	[SerializeField]
+	private GameObject max_star_gameobject;
+
+	[SerializeField]
+	private RectTransform max_star_rect;
+
+	[SerializeField]
+	private GameObject no_gap_gameobject;
+
+	[SerializeField]
+	private Text popuptext;
+
+	[SerializeField]
+	private Text multtext;
+
+	[SerializeField]
+	private Text popuptextshadow;
+
+	[SerializeField]
+	private Text multtextshadow;
+
+	private RectTransform nogap_rect;
+
+	private RectTransform popuptext_rect;
+
+	private float popuptext_ypos;
+
+	private float multtexthide;
+
+	[SerializeField]
+	private CanvasGroup restartfader;
+
+	[SerializeField]
+	private GameObject[] restart_objects;
+
+	[SerializeField]
+	private Image restart_circle_fill;
+
+	private float restarttimer;
+
+	private float currenthealth;
+
+	public GameObject healthobj;
+
+	public RectTransform healthfill;
+
+	private float healthposy = -2f;
+
+	private float healthzerotimer;
+
+	public ChampGUIController champcontroller;
+
+	public GameObject flag_practicemode;
+
+	public GameObject flag_turbomode;
+
+	private int scores_A;
+
+	private int scores_B;
+
+	private int scores_C;
+
+	private int scores_D;
+
+	private int scores_F;
+
+	private AssetBundle myLoadedAssetBundle;
+
+	private AssetBundle mySoundAssetBundle;
+
+	private noteendeffect[] allnoteendeffects = new noteendeffect[15];
+
+	public GameObject[] hats;
+
+	[SerializeField]
+	private LevelEditor leveleditor_script;
+
+	private double track_xpos_smoothscrolling;
+
+	private double track_xpos_fixedperframe;
+
+	[SerializeField]
+	private GameObject champ_bloom_gameobject;
+
+	[SerializeField]
+	private RectTransform[] champ_bloom_circles;
+
+	private float champ_bloom_rotation;
+
+	private Gradient note_end_rainbow_gradient;
+
+	public StringLocalizer string_localizer;
+
+	private string[] note_end_strings = new string[5] { "perfecto", "nice", "ok", "meh", "nasty" };
+
+	private string highest_combo_text = "Highest Combo:";
+
+	private float minimum_note_gap_size = 0.025f;
+
+	private float total_length_of_active_notes;
+
+	private List<GameObject> note_objs_to_destroy = new List<GameObject>();
+
+	[SerializeField]
+	private RectTransform gameplay_holder_rect;
+
+	[SerializeField]
+	private RectTransform champ_full_rect;
+
+	private track_status musictrack_status;
+
+	private int last_samplecount;
+
+	private bool sync_this_frame;
+
+	public loaded_gameplay_settings gameplay_settings;
+
+	private void Awake()
+	{
+		importGameplaySettings();
+	}
+
+	private void Start()
+	{
+		if (devmode)
+		{
+			Application.targetFrameRate = 60;
+			SaverLoader.loadSavedGame();
+			SaverLoader.tryToLoadSettings(apply: false);
+			SaverLoader.loadLevelData();
+			Cursor.visible = true;
+			if (track_to_test != "")
+			{
+				GlobalVariables.chosen_track = track_to_test;
+			}
+			else
+			{
+				GlobalVariables.chosen_track = "warmup";
+			}
+		}
+		if (gameplay_settings.show_calibration_screen)
+		{
+			if (gameplay_settings.mouse_controldirection == 0)
+			{
+				mouse_rel_pos = 0f;
+			}
+			else if (gameplay_settings.mouse_controldirection == 1)
+			{
+				mouse_rel_pos = 1f;
+			}
+			else if (gameplay_settings.mouse_controldirection == 2)
+			{
+				mouse_rel_pos = 1f;
+			}
+			else if (gameplay_settings.mouse_controldirection == 3)
+			{
+				mouse_rel_pos = 0f;
+			}
+		}
+		GlobalVariables.gameplay_allnotescores.Clear();
+		getTootKeys();
+		note_end_strings[0] = string_localizer.getLocalizedText("gameplay_score_perfecto");
+		note_end_strings[1] = string_localizer.getLocalizedText("gameplay_score_nice");
+		note_end_strings[2] = string_localizer.getLocalizedText("gameplay_score_ok");
+		note_end_strings[3] = string_localizer.getLocalizedText("gameplay_score_meh");
+		note_end_strings[4] = string_localizer.getLocalizedText("gameplay_score_nasty");
+		highest_combo_text = string_localizer.getLocalizedText("gameplay_ui_combo");
+		latency_offset = gameplay_settings.timing_adjustment * 0.001f;
+		custom_level = GlobalVariables.playing_custom_track;
+		if (GlobalVariables.turbomode)
+		{
+			latency_offset *= 2f;
+		}
+		else if (GlobalVariables.practicemode != 1f)
+		{
+			latency_offset *= GlobalVariables.practicemode;
+			breathmultiplier = GlobalVariables.practicemode;
+		}
+		if (GlobalVariables.build_target == "mac" && gameplay_settings.mouse_movementmode == 1 && GlobalVariables.scene_destination != "freeplay")
+		{
+			Cursor.lockState = CursorLockMode.Locked;
+		}
+		else if (!devmode)
+		{
+			Cursor.lockState = CursorLockMode.Confined;
+		}
+		retrying = false;
+		musictrack_status = track_status.waiting_to_start;
+		notescoreaverage = 0f;
+		notescoresamples = 0f;
+		notescoretotal = 0f;
+		musictrack_timeelapsed = -1.0;
+		curtains.SetActive(value: true);
+		curtainc = curtains.GetComponent<CurtainController>();
+		champ_bloom_gameobject.SetActive(value: false);
+		level_finished = false;
+		scores_A = 0;
+		scores_B = 0;
+		scores_C = 0;
+		scores_D = 0;
+		scores_F = 0;
+		if (GlobalVariables.scene_destination == "freeplay")
+		{
+			freeplay = true;
+			currentnotestart = 9999f;
+			backbtn.SetActive(value: true);
+			champcontroller.hideChampText();
+			timeelapsedobj.SetActive(value: false);
+			time_bar_full_obj.SetActive(value: false);
+		}
+		else
+		{
+			backbtn.SetActive(value: false);
+		}
+		puppetnum = GlobalVariables.chosen_character;
+		textureindex = GlobalVariables.chosen_trombone;
+		soundset = GlobalVariables.chosen_soundset;
+		popuptextobj.transform.localScale = new Vector3(0f, 0f, 1f);
+		multtextobj.transform.localScale = new Vector3(0f, 0f, 1f);
+		max_star_gameobject.transform.localScale = new Vector3(0f, 0f, 1f);
+		no_gap_gameobject.transform.localScale = new Vector3(0f, 0f, 1f);
+		popuptext_rect = popuptextobj.transform.GetComponent<RectTransform>();
+		nogap_rect = no_gap_gameobject.transform.GetComponent<RectTransform>();
+		BloomModel.Settings settings = gameplayppp.bloom.settings;
+		settings.bloom.intensity = 0f;
+		gameplayppp.bloom.settings = settings;
+		gameplayppp.motionBlur.enabled = GlobalVariables.localsettings.motionblur;
+		if (!freeplay && !leveleditor)
+		{
+			if (!devmode)
+			{
+				songtitle.text = GlobalVariables.chosen_track_data.trackname_long;
+				songtitleshadow.text = GlobalVariables.chosen_track_data.trackname_long;
+			}
+			else
+			{
+				songtitle.text = "testing";
+				songtitleshadow.text = "testing";
+			}
+		}
+		else if (leveleditor)
+		{
+			songtitle.text = "LEVEL EDITOR";
+			songtitleshadow.text = "LEVEL EDITOR";
+		}
+		else if (freeplay)
+		{
+			songtitle.text = "";
+			songtitleshadow.text = "";
+			ui_score.text = "";
+			ui_score_shadow.text = "";
+			highestcombo.text = "";
+			highestcomboshad.text = "";
+		}
+		if (!custom_level)
+		{
+			string text = "";
+			if (!freeplay)
+			{
+				text = SaverLoader.removeFinalBackSlash(GlobalVariables.chosen_track_data.track_folder) + "/contentbundle";
+			}
+			else if (freeplay)
+			{
+				text = SaverLoader.getAssetBundlePath("freeplay");
+			}
+			myLoadedAssetBundle = AssetBundle.LoadFromFile(text);
+			if (myLoadedAssetBundle == null)
+			{
+				logMessage("Failed to load AssetBundle from: " + text);
+				return;
+			}
+			if (!freeplay)
+			{
+				AudioSource component = myLoadedAssetBundle.LoadAsset<GameObject>("music_" + GlobalVariables.chosen_track).GetComponent<AudioSource>();
+				musictrack.clip = component.clip;
+				musictrack_cliplength = musictrack.clip.length;
+				musictrack.volume = component.volume * GlobalVariables.localsettings.maxvolume_music;
+				if (GlobalVariables.turbomode)
+				{
+					musictrack.pitch = 2f;
+					smooth_scrolling_move_mult = 2f;
+				}
+				else
+				{
+					musictrack.pitch = 1f;
+				}
+				component = null;
+			}
+			StartCoroutine(loadAssetBundleResources());
+			if (!freeplay && GlobalVariables.chosen_track_data.is_paid_dlc)
+			{
+				bgcontroller.songname = "paid_dlc";
+			}
+			else
+			{
+				bgcontroller.songname = GlobalVariables.chosen_track;
+			}
+			GameObject gameObject = null;
+			if (!freeplay)
+			{
+				gameObject = myLoadedAssetBundle.LoadAsset<GameObject>("BGCam_" + GlobalVariables.chosen_track);
+			}
+			else if (freeplay)
+			{
+				gameObject = myLoadedAssetBundle.LoadAsset<GameObject>("BGCam_freeplay");
+			}
+			if (gameObject != null)
+			{
+				GameObject gameObject2 = UnityEngine.Object.Instantiate(gameObject, new Vector3(0f, 0f, 0f), Quaternion.identity, bgholder.transform);
+				gameObject2.transform.localPosition = new Vector3(0f, 0f, 0f);
+				bgcontroller.fullbgobject = gameObject2;
+			}
+			gameObject = null;
+		}
+		else if (custom_level)
+		{
+			StartCoroutine(loadCustomAudio());
+			GameObject gameObject3 = UnityEngine.Object.Instantiate(custombg_prefab, new Vector3(0f, 0f, 0f), Quaternion.identity, bgholder.transform);
+			gameObject3.transform.localPosition = new Vector3(0f, 0f, 0f);
+			bgcontroller.songname = "tootmaker_custom";
+			bgcontroller.fullbgobject = gameObject3;
+			gameObject3 = null;
+			StartCoroutine(loadCustomBG());
+			StartCoroutine(loadAssetBundleResources());
+		}
+		string[] array = new string[6] { "default", "bass", "muted", "eightbit", "club", "fart" };
+		mySoundAssetBundle = AssetBundle.LoadFromFile(Application.streamingAssetsPath + "/soundpacks/soundpack" + array[soundset]);
+		if (mySoundAssetBundle == null)
+		{
+			logMessage("Failed to load sound pack AssetBundle!");
+			return;
+		}
+		logMessage("LOADED <<<sound pack>>> ASSETBUNDLE");
+		UnityEngine.Object.Instantiate(mySoundAssetBundle.LoadAsset<GameObject>("soundpack" + array[soundset]), new Vector3(0f, 0f, 0f), Quaternion.identity, soundSets.transform);
+		StartCoroutine(loadSoundBundleResources());
+		puppet_human = UnityEngine.Object.Instantiate(playermodels[puppetnum], new Vector3(0f, 0f, 0f), Quaternion.identity, modelparent.transform);
+		puppet_human.transform.localPosition = new Vector3(0.7f, -0.4f, 1.3f);
+		if (freeplay)
+		{
+			LeanTween.moveLocalX(puppet_human, 0.4f, 0.01f);
+		}
+		puppet_humanc = puppet_human.GetComponent<HumanPuppetController>();
+		puppet_humanc.orig_y_pos = -0.4f;
+		if ((GlobalVariables.localsave.cardcollectionstatus[36] >= 10 && GlobalVariables.show_toot_rainbow) || (GlobalVariables.localsave.cardcollectionstatus_gold[36] > 0 && GlobalVariables.show_toot_rainbow))
+		{
+			puppet_humanc.show_rainbow = true;
+		}
+		puppet_humanc.setTromboneTex(textureindex);
+		topbreathr = topbreath.GetComponent<RectTransform>();
+		bottombreathr = bottombreath.GetComponent<RectTransform>();
+		noteholderr = noteholder.GetComponent<RectTransform>();
+		noteparticlesrect = noteparticles.transform.GetComponent<RectTransform>();
+		leftboundsglow.transform.localScale = new Vector3(0.01f, 1f, 1f);
+		for (int i = 0; i < 15; i++)
+		{
+			notelines[i] = notelinesholder.transform.GetChild(i).gameObject;
+		}
+		for (int j = 0; j < 8; j++)
+		{
+			GameObject gameObject4 = notelines[j].gameObject;
+			float num = vbounds / 12f;
+			switch (j)
+			{
+			case 0:
+				gameObject4.transform.localPosition = new Vector3(0f, vbounds, 0f);
+				break;
+			case 1:
+				gameObject4.transform.localPosition = new Vector3(0f, vbounds - num, 0f);
+				break;
+			case 2:
+				gameObject4.transform.localPosition = new Vector3(0f, vbounds - num * 3f, 0f);
+				break;
+			case 3:
+				gameObject4.transform.localPosition = new Vector3(0f, vbounds - num * 5f, 0f);
+				break;
+			case 4:
+				gameObject4.transform.localPosition = new Vector3(0f, vbounds - num * 7f, 0f);
+				break;
+			case 5:
+				gameObject4.transform.localPosition = new Vector3(0f, vbounds - num * 8f, 0f);
+				break;
+			case 6:
+				gameObject4.transform.localPosition = new Vector3(0f, vbounds - num * 10f, 0f);
+				break;
+			case 7:
+				gameObject4.transform.localPosition = new Vector3(0f, vbounds - num * 12f, 0f);
+				break;
+			}
+			gameObject4 = null;
+		}
+		for (int k = 0; k < 7; k++)
+		{
+			GameObject gameObject5 = notelines[k + 8].gameObject;
+			float num2 = vbounds / 12f;
+			switch (k)
+			{
+			case 0:
+				gameObject5.transform.localPosition = new Vector3(0f, 0f - num2, 0f);
+				break;
+			case 1:
+				gameObject5.transform.localPosition = new Vector3(0f, num2 * -3f, 0f);
+				break;
+			case 2:
+				gameObject5.transform.localPosition = new Vector3(0f, num2 * -5f, 0f);
+				break;
+			case 3:
+				gameObject5.transform.localPosition = new Vector3(0f, num2 * -7f, 0f);
+				break;
+			case 4:
+				gameObject5.transform.localPosition = new Vector3(0f, num2 * -8f, 0f);
+				break;
+			case 5:
+				gameObject5.transform.localPosition = new Vector3(0f, num2 * -10f, 0f);
+				break;
+			case 6:
+				gameObject5.transform.localPosition = new Vector3(0f, num2 * -12f, 0f);
+				break;
+			}
+			gameObject5 = null;
+		}
+		for (int l = 0; l < 15; l++)
+		{
+			notelinepos[l] = notelines[l].gameObject.transform.localPosition.y;
+			notelines[l] = null;
+			UnityEngine.Object.Destroy(notelines[l]);
+		}
+		pointerrect = pointer.GetComponent<RectTransform>();
+		pointerrect.anchoredPosition3D = new Vector3(zeroxpos, 0f, 0f);
+		noteparticlesrect.anchoredPosition3D = new Vector3(zeroxpos, 0f, 0f);
+		leftbounds.GetComponent<RectTransform>().anchoredPosition3D = new Vector3(zeroxpos, 60f, 0f);
+		if (!leveleditor && !freeplay)
+		{
+			buildLevel();
+			trackmovemult = tempo * (1f / 60f) * (float)defaultnotelength;
+			_ = zeroxpos;
+			_ = noteoffset;
+			_ = trackmovemult;
+			noteholderr.anchoredPosition3D = new Vector3(zeroxpos, 0f, 0f);
+			float track_time = 0f - latency_offset - noteoffset;
+			syncTrackPositions(track_time);
+		}
+		if (!leveleditor)
+		{
+			editorcanvas.SetActive(value: false);
+		}
+		else if (leveleditor)
+		{
+			readytoplay = true;
+			editorcanvas.SetActive(value: true);
+			buildEditorGUI();
+		}
+		if (freeplay)
+		{
+			editorcanvas.SetActive(value: false);
+			healthobj.SetActive(value: false);
+		}
+		if (GlobalVariables.testScreenRatio() == 1610)
+		{
+			champ_full_rect.anchoredPosition = new Vector2(90f, -33f);
+			champ_bloom_gameobject.transform.GetComponent<RectTransform>().anchoredPosition3D = new Vector3(130f, -30f, 0f);
+			topbreath.transform.parent.GetComponent<RectTransform>().anchoredPosition = new Vector2(-393f, 163f);
+			bottombreath.transform.parent.GetComponent<RectTransform>().anchoredPosition = new Vector2(-393f, -163f);
+			breath_onscreenpos = -320f;
+			breath_offscreenpos = -530f;
+		}
+		else if (GlobalVariables.testScreenRatio() == 2109)
+		{
+			modelparent.transform.localPosition = new Vector3(-0.08f, -90.05f, -7.85f);
+			modelparent.transform.localEulerAngles = new Vector3(0f, 11f, 0f);
+			gameplay_holder_rect.anchoredPosition3D = new Vector3(130f, 0f, 0f);
+			champ_full_rect.anchoredPosition = new Vector2(25f, -33f);
+			champ_bloom_gameobject.transform.GetComponent<RectTransform>().anchoredPosition3D = new Vector3(62f, -30f, 0f);
+			topbreath.transform.parent.GetComponent<RectTransform>().anchoredPosition = new Vector2(-435f, 163f);
+			bottombreath.transform.parent.GetComponent<RectTransform>().anchoredPosition = new Vector2(-435f, -163f);
+			breath_onscreenpos = -550f;
+			breath_offscreenpos = -725f;
+			curtains.transform.parent.gameObject.transform.localScale = new Vector3(1.12f, 1f, 1f);
+		}
+		else
+		{
+			breath_onscreenpos = -420f;
+			breath_offscreenpos = -585f;
+		}
+		pointer.transform.SetAsLastSibling();
+		GradientColorKey[] colorKeys = new GradientColorKey[6]
+		{
+			new GradientColorKey(new Color(1f, 0.6f, 0.6f), 0f),
+			new GradientColorKey(new Color(1f, 1f, 0.6f), 0.2f),
+			new GradientColorKey(new Color(0.6f, 1f, 0.6f), 0.4f),
+			new GradientColorKey(new Color(0.6f, 1f, 1f), 0.6f),
+			new GradientColorKey(new Color(0.6f, 0.6f, 1f), 0.8f),
+			new GradientColorKey(new Color(1f, 0.6f, 1f), 1f)
+		};
+		GradientAlphaKey[] alphaKeys = new GradientAlphaKey[2]
+		{
+			new GradientAlphaKey(0.4f, 0f),
+			new GradientAlphaKey(0.4f, 1f)
+		};
+		note_end_rainbow_gradient = new Gradient();
+		note_end_rainbow_gradient.SetKeys(colorKeys, alphaKeys);
+		if (!GlobalVariables.localsettings.calibrationscreen)
+		{
+			curtainc.doSpotLightAnim();
+			if (!freeplay && !leveleditor)
+			{
+				startSong(delayed: true);
+			}
+		}
+		else
+		{
+			curtainc.doTutAnimation();
+		}
+		if (!freeplay)
+		{
+			musictrack = musicref.GetComponent<AudioSource>();
+		}
+		else if (freeplay)
+		{
+			tempo = 40f;
+			Invoke("startDance", 1f);
+		}
+		if (!GlobalVariables.playing_custom_track || GlobalVariables.customtrack_paths == null)
+		{
+			if (!freeplay)
+			{
+				GlobalVariables.doSteamTimelineEvent(GlobalVariables.timeline_event_types.song_begin, GlobalVariables.chosen_track_data.trackname_long);
+			}
+			else if (freeplay)
+			{
+				GlobalVariables.doSteamTimelineEvent(GlobalVariables.timeline_event_types.song_begin, string_localizer.getLocalizedText("gameplay_freeplay_name"));
+			}
+		}
+		GarbageCollector.GCMode = GarbageCollector.Mode.Disabled;
+	}
+
+	private IEnumerator loadCustomBG(string[] filepaths = null)
+	{
+		string text = string.Empty;
+		if (GlobalVariables.customtrack_paths == null)
+		{
+			filepaths = new string[3]
+			{
+				GlobalVariables.chosen_track_data.track_folder + "/bg.mp4",
+				GlobalVariables.chosen_track_data.track_folder + "/bg.png",
+				GlobalVariables.chosen_track_data.track_folder + "/bg.jpg"
+			};
+		}
+		else if (GlobalVariables.customtrack_paths[3] != "" && GlobalVariables.customtrack_paths[3] != string.Empty)
+		{
+			filepaths = new string[1] { GlobalVariables.customtrack_paths[3] };
+		}
+		else if (GlobalVariables.customtrack_paths[1] != "" && GlobalVariables.customtrack_paths[1] != string.Empty)
+		{
+			filepaths = new string[1] { GlobalVariables.customtrack_paths[1] };
+		}
+		else
+		{
+			Path.GetDirectoryName(GlobalVariables.customtrack_paths[0]);
+			filepaths = new string[0];
+		}
+		foreach (string text2 in filepaths)
+		{
+			if (text2 != null && !(text2 == "") && !(text2 == string.Empty) && File.Exists(text2))
+			{
+				text = text2;
+				break;
+			}
+		}
+		if (text == string.Empty)
+		{
+			yield break;
+		}
+		string extension = Path.GetExtension(text);
+		if (extension == ".mp4" || extension == ".MP4")
+		{
+			bgcontroller.fullbgobject.transform.GetChild(0).GetChild(0).gameObject.SetActive(value: false);
+			bgcontroller.video_bg = true;
+			custombg_video = bgcontroller.fullbgobject.transform.GetChild(0).GetChild(1).GetComponent<VideoPlayer>();
+			custombg_video.enabled = true;
+			custombg_video.gameObject.SetActive(value: true);
+			custombg_video.source = VideoSource.Url;
+			custombg_video.audioOutputMode = VideoAudioOutputMode.None;
+			custombg_video.url = text;
+			custombg_video.Prepare();
+			custombg_video.time = 0.0;
+			custombg_video.Pause();
+			yield break;
+		}
+		bgcontroller.video_bg = false;
+		Uri uri = new UriBuilder(Uri.UriSchemeFile, string.Empty)
+		{
+			Path = text
+		}.Uri;
+		using UnityWebRequest www = UnityWebRequestTexture.GetTexture(uri, nonReadable: true);
+		yield return www.SendWebRequest();
+		if (www.error == null)
+		{
+			Texture content = DownloadHandlerTexture.GetContent(www);
+			RawImage component = bgcontroller.fullbgobject.transform.GetChild(0).GetChild(0).GetComponent<RawImage>();
+			component.color = new Color(1f, 1f, 1f, 1f);
+			component.texture = content;
+			component.SetNativeSize();
+			float num = 1080f / (float)component.mainTexture.height;
+			component.transform.localScale = new Vector3(num, num, 1f);
+		}
+	}
+
+	private IEnumerator loadCustomAudio()
+	{
+		string[] array = null;
+		string text = string.Empty;
+		if (GlobalVariables.customtrack_paths == null)
+		{
+			array = new string[4]
+			{
+				GlobalVariables.chosen_track_data.track_folder + "/song.ogg",
+				GlobalVariables.chosen_track_data.track_folder + "/song.mp3",
+				GlobalVariables.chosen_track_data.track_folder + "/song.wav",
+				GlobalVariables.chosen_track_data.track_folder + "/song.aiff"
+			};
+		}
+		else if (GlobalVariables.customtrack_paths[2] != "" && GlobalVariables.customtrack_paths[2] != string.Empty)
+		{
+			array = new string[1] { GlobalVariables.customtrack_paths[2] };
+		}
+		string[] array2 = array;
+		foreach (string text2 in array2)
+		{
+			if (File.Exists(text2))
+			{
+				text = text2;
+				break;
+			}
+		}
+		if (text == string.Empty)
+		{
+			Debug.LogError("Audio filepath string was empty");
+			yield break;
+		}
+		AudioType audioType = AudioType.OGGVORBIS;
+		switch (Path.GetExtension(text))
+		{
+		case ".ogg":
+		case ".OGG":
+			audioType = AudioType.OGGVORBIS;
+			break;
+		case ".mp3":
+		case ".MP3":
+			audioType = AudioType.MPEG;
+			break;
+		case ".wav":
+		case ".WAV":
+			audioType = AudioType.WAV;
+			break;
+		case ".aiff":
+		case ".AIFF":
+			audioType = AudioType.AIFF;
+			break;
+		}
+		Uri uri = new UriBuilder(Uri.UriSchemeFile, string.Empty)
+		{
+			Path = text
+		}.Uri;
+		using UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, audioType);
+		yield return www.SendWebRequest();
+		if (www.error == null)
+		{
+			while (!www.isDone)
+			{
+				yield return null;
+			}
+			AudioClip content = DownloadHandlerAudioClip.GetContent(www);
+			musictrack.clip = content;
+			musictrack_cliplength = musictrack.clip.length;
+			musictrack.volume = 1f * GlobalVariables.localsettings.maxvolume_music;
+			if (GlobalVariables.turbomode)
+			{
+				musictrack.pitch = 2f;
+				smooth_scrolling_move_mult = 2f;
+			}
+			else
+			{
+				musictrack.pitch = 1f;
+			}
+		}
+	}
+
+	private IEnumerator loadAssetBundleResources()
+	{
+		yield return 0;
+		if (GlobalVariables.turbomode)
+		{
+			musictrack.pitch = 2f;
+			flag_turbomode.SetActive(value: true);
+		}
+		else
+		{
+			musictrack.pitch = 1f;
+		}
+		if (gameplay_settings.scroll_mode == 0)
+		{
+			smooth_scrolling = true;
+		}
+		else
+		{
+			smooth_scrolling = false;
+		}
+		if (GlobalVariables.practicemode != 1f)
+		{
+			flag_practicemode.SetActive(value: true);
+			flag_practicemode.transform.GetChild(2).GetComponent<Text>().text = string_localizer.getLocalizedText("gameplay_practicemode") + " (" + Mathf.Round(GlobalVariables.practicemode * 100f) + "<size=8>%</size>)";
+			smooth_scrolling_move_mult = GlobalVariables.practicemode;
+		}
+		else if (GlobalVariables.practicemode == 1f)
+		{
+			flag_practicemode.SetActive(value: false);
+		}
+		restartfader.alpha = 0f;
+		restart_objects[0].SetActive(value: false);
+		restart_objects[1].SetActive(value: false);
+		if (improv_zone_text.activeSelf)
+		{
+			improv_zone_text.SetActive(value: true);
+		}
+		if (freeplay)
+		{
+			timeelapsedobj.SetActive(value: false);
+			time_bar_full_obj.SetActive(value: false);
+			bgcontroller.songname = "freeplay";
+		}
+		else
+		{
+			float num = levelendtime;
+			float num2 = Mathf.Floor(num / 60f);
+			int num3 = (int)num - (int)num2 * 60;
+			string text = num3.ToString();
+			if (num3 < 10)
+			{
+				text = "0" + text;
+			}
+			totaltracktimestring = num2 + ":" + text;
+			updateTimeCounter(0f);
+		}
+		bgcontroller.setUpBGControllerRefs();
+		notescoreaverage = 0f;
+		notescoresamples = 0f;
+		notescoretotal = 0f;
+		nogap_rect = no_gap_gameobject.transform.GetComponent<RectTransform>();
+		for (int i = 0; i < 15; i++)
+		{
+			GameObject gameObject = noteparticles.transform.GetChild(i).gameObject;
+			noteendeffect noteendeffect2 = new noteendeffect
+			{
+				noteeffect_obj = gameObject,
+				noteeffect_rect = gameObject.transform.GetComponent<RectTransform>(),
+				burst_obj = gameObject.transform.GetChild(0).gameObject,
+				burst_img = gameObject.transform.GetChild(0).GetComponent<Image>(),
+				burst_canvasg = gameObject.transform.GetChild(0).GetComponent<CanvasGroup>(),
+				drops_obj = gameObject.transform.GetChild(1).gameObject,
+				drops_canvasg = gameObject.transform.GetChild(1).GetComponent<CanvasGroup>(),
+				burst_particles = gameObject.transform.GetChild(3).GetComponent<ParticleSystem>(),
+				combotext_obj = gameObject.transform.GetChild(2).gameObject,
+				combotext_rect = gameObject.transform.GetChild(2).GetComponent<RectTransform>(),
+				combotext_txt_front = gameObject.transform.GetChild(2).GetChild(0).GetComponent<Text>(),
+				combotext_txt_shadow = gameObject.transform.GetChild(2).GetComponent<Text>()
+			};
+			allnoteendeffects[i] = noteendeffect2;
+		}
+		if (GlobalVariables.chosen_hat > 0)
+		{
+			GameObject obj = UnityEngine.Object.Instantiate(hats[GlobalVariables.chosen_hat - 1], puppet_humanc.bellmesh.transform, worldPositionStays: false);
+			obj.transform.localPosition = new Vector3(0.189f, 0.332f, 0.309f);
+			obj.transform.localEulerAngles = new Vector3(0f, 0f, 45f);
+			obj.transform.localScale = new Vector3(0.12f, 0.12f, 0.2f);
+		}
+		GlobalVariables.gameplay_perfect = true;
+		if (!leveleditor && !freeplay)
+		{
+			try
+			{
+				if (GlobalVariables.chosen_track_data.user_scores != null)
+				{
+					previous_high_score = GlobalVariables.chosen_track_data.user_scores.scores[0];
+				}
+				else
+				{
+					previous_high_score = 0;
+				}
+			}
+			catch
+			{
+				previous_high_score = 0;
+			}
+		}
+		else
+		{
+			previous_high_score = 0;
+		}
+		if (previous_high_score == 0)
+		{
+			previous_high_score_surpassed = true;
+		}
+		else
+		{
+			previous_high_score_surpassed = false;
+		}
+		previous_high_gameobject.SetActive(value: false);
+		popuptext_ypos = popuptext_rect.anchoredPosition3D.y;
+		float track_time = 0f - latency_offset - noteoffset;
+		syncTrackPositions(track_time);
+		if (!freeplay)
+		{
+			updateHighestCombo(0);
+		}
+	}
+
+	private void syncTrackPositions(float track_time)
+	{
+		track_xpos_fixedperframe = (double)zeroxpos + (double)track_time * (0.0 - trackmovemult);
+		track_xpos_smoothscrolling = track_xpos_fixedperframe;
+		noteholderr.anchoredPosition3D = new Vector3((float)track_xpos_fixedperframe, 0f, 0f);
+	}
+
+	private void updateTimeCounter(float elapsedtime)
+	{
+		if (elapsedtime > 0f)
+		{
+			float num = Mathf.Floor(elapsedtime * (1f / 60f));
+			int num2 = Mathf.Max((int)elapsedtime - (int)num * 60, 0);
+			string text = num2.ToString();
+			if (num2 < 10)
+			{
+				text = "0" + text;
+			}
+			timeelapsed_shad.text = num + ":" + text + " / " + totaltracktimestring;
+			timeelapsed.text = num + ":" + text + " <color=#444>/</color> " + totaltracktimestring;
+			float num3 = elapsedtime / levelendtime;
+			time_bar_transform.localScale = new Vector3(num3, 1f, 1f);
+			time_bar_nub.anchoredPosition3D = new Vector3(num3 * 120f - 60f, 50f, 0f);
+			if (num3 >= next_time_bar_goal && time_bar_index < 3)
+			{
+				next_time_bar_goal += 0.25f;
+				time_bar_full_obj.transform.localScale = new Vector3(1.1f, 1.1f, 1f);
+				LeanTween.scale(time_bar_full_obj, new Vector3(1f, 1f, 1f), 0.15f).setEaseOutQuart();
+				GameObject obj = time_bar_ticks[time_bar_index];
+				obj.transform.localScale = new Vector3(4f, 8f, 1f);
+				LeanTween.scale(obj, new Vector3(1f, 1f, 1f), 0.15f).setEaseOutQuart();
+				time_bar_index++;
+			}
+		}
+		else
+		{
+			timeelapsed_shad.text = "0:00 / " + totaltracktimestring;
+			timeelapsed.text = "0:00 <color=#444>/</color> " + totaltracktimestring;
+		}
+	}
+
+	private IEnumerator loadSoundBundleResources()
+	{
+		yield return 0;
+		trombclips = currentnotesound.gameObject.transform.GetChild(0).gameObject.GetComponent<AudioClipsTromb>();
+		if (soundset == 0)
+		{
+			trombvol_default = 1f;
+		}
+		else if (soundset == 1)
+		{
+			trombvol_default = 0.72f;
+		}
+		else if (soundset == 2)
+		{
+			trombvol_default = 0.34f;
+		}
+		else if (soundset == 3)
+		{
+			trombvol_default = 0.25f;
+		}
+		else if (soundset == 4)
+		{
+			trombvol_default = 0.25f;
+		}
+		else if (soundset == 5)
+		{
+			trombvol_default = 0.75f;
+		}
+		trombvol_current = trombvol_default;
+		currentnotesound.volume = trombvol_default;
+		fixAudioMixerStuff();
+	}
+
+	private void logMessage(string msg)
+	{
+	}
+
+	private void fixAudioMixerStuff()
+	{
+		if (GlobalVariables.practicemode == 1f)
+		{
+			musictrack.outputAudioMixerGroup = audmix_bgmus;
+		}
+		else if (GlobalVariables.practicemode != 1f)
+		{
+			musictrack.outputAudioMixerGroup = audmix_bgmus_pitchshifted;
+			audmix.SetFloat("pitch", GlobalVariables.practicemode);
+			audmix.SetFloat("pitchShifterMult", 1f / GlobalVariables.practicemode);
+		}
+		audmix.SetFloat("mastervol", Mathf.Log10(GlobalVariables.localsettings.maxvolume) * 40f);
+		audmix.SetFloat("trombvol", Mathf.Log10(GlobalVariables.localsettings.maxvolume_tromb) * 60f + 12f);
+		audmix.SetFloat("airhornvol", (GlobalVariables.localsettings.maxvolume_airhorn - 1f) * 80f);
+	}
+
+	public void unloadBundles()
+	{
+		if (myLoadedAssetBundle != null)
+		{
+			myLoadedAssetBundle.Unload(unloadAllLoadedObjects: true);
+			myLoadedAssetBundle = null;
+		}
+		if (mySoundAssetBundle != null)
+		{
+			mySoundAssetBundle.Unload(unloadAllLoadedObjects: true);
+			mySoundAssetBundle = null;
+		}
+	}
+
+	public void backFromFreeplay()
+	{
+		if (!quitting)
+		{
+			closeCurtains();
+			popDownPuppet();
+			paused = true;
+			quitting = true;
+			sfxrefs.backfromfreeplay.Play();
+		}
+	}
+
+	private void popDownPuppet()
+	{
+		LeanTween.moveLocalY(puppet_human, -2f, 0.35f).setEaseInQuart();
+	}
+
+	private void closeCurtains()
+	{
+		LeanTween.cancelAll();
+		curtainc.closeCurtain(loadscene: true);
+	}
+
+	private void loadFromEditor()
+	{
+		tryToLoadLevel("EDITOR");
+	}
+
+	private void loadMidiFromEditor()
+	{
+		tryToLoadLevel("EDITOR_MIDI");
+	}
+
+	private float easeInOutVal(float t, float b, float c, float d)
+	{
+		t /= d / 2f;
+		if (t < 1f)
+		{
+			return c / 2f * t * t + b;
+		}
+		t -= 1f;
+		return (0f - c) / 2f * (t * (t - 2f) - 1f) + b;
+	}
+
+	private void startSong(bool delayed)
+	{
+		float time = 2.5f;
+		float delay = 2f;
+		if (!delayed)
+		{
+			time = 1f;
+			delay = 0.5f;
+		}
+		tempotimer = 60f / (tempo * (float)beatspermeasure);
+		tempotimerdot = 60f / tempo;
+		Invoke("playsong", time);
+		Invoke("startDance", time);
+		calcMaxScore();
+		if ((bool)puppet_human)
+		{
+			LeanTween.scaleY(puppet_human, 1f, 0.5f).setEaseOutBack().setDelay(delay);
+		}
+	}
+
+	private void calcMaxScore()
+	{
+		maxlevelscore = 0;
+		GlobalVariables.gameplay_absolute_max_score = 0;
+		int num = 0;
+		float num2 = 0f;
+		float num3 = 0f;
+		int num4 = 0;
+		for (int i = 0; i < leveldata.Count; i++)
+		{
+			float[] array = leveldata[i];
+			bool flag = false;
+			if (i + 1 < leveldata.Count && leveldata[i + 1][0] - (array[0] + array[1]) < minimum_note_gap_size)
+			{
+				flag = true;
+			}
+			if (flag)
+			{
+				num2 += array[1];
+				continue;
+			}
+			num2 += array[1];
+			float num5 = Mathf.Clamp(num2, 0.2f, 5f);
+			num5 = num5 * 8f + 10f;
+			float f = Mathf.Floor(num5 * 100f * 1.315f) * 10f;
+			maxlevelscore += Mathf.FloorToInt(f);
+			if (num4 > 23)
+			{
+				num3 = 11.5f;
+			}
+			num += Mathf.FloorToInt(num5 * 100f * (num3 * 0.1f + 1f)) * 10;
+			if (num3 < 10f)
+			{
+				num3 += 1f;
+			}
+			num2 = 0f;
+			num4++;
+		}
+		logMessage("S-rank score: " + maxlevelscore + " (" + leveldata.Count + " notes)");
+		logMessage("absolute max level score: " + num + " (" + leveldata.Count + " notes)");
+		GlobalVariables.gameplay_absolute_max_score = num;
+	}
+
+	private void startDance()
+	{
+		readytoplay = true;
+		float num = tempo;
+		if (tempo > 85f)
+		{
+			num *= 0.5f;
+		}
+		if (beatspermeasure == 3)
+		{
+			num *= 2f / 3f;
+		}
+		puppet_humanc.startPuppetBob(num);
+	}
+
+	private void playsong()
+	{
+		readytoplay = true;
+		musictrack.Play();
+		if (custombg_video != null)
+		{
+			if (GlobalVariables.turbomode)
+			{
+				custombg_video.playbackSpeed = 2f;
+			}
+			else if (GlobalVariables.practicemode < 1f)
+			{
+				custombg_video.playbackSpeed = GlobalVariables.practicemode;
+			}
+			custombg_video.Play();
+		}
+		syncTrackPositions(0f - latency_offset - noteoffset);
+	}
+
+	private void buildEditorGUI()
+	{
+		editorpostext.text = editorposition.ToString();
+		changeEditorTime(0);
+		changeEditorTempo(0);
+		changeLineSpacing(reposition: false, 0);
+		changeTimeSig(0);
+		noteholderr.anchoredPosition3D = new Vector3(zeroxpos, 0f, 0f);
+		for (int i = 0; i < 500; i++)
+		{
+			GameObject obj = UnityEngine.Object.Instantiate(beatline, new Vector3(0f, 0f, 0f), Quaternion.identity, noteholder.transform);
+			obj.name = ("bl" + i).ToString();
+			RectTransform component = obj.GetComponent<RectTransform>();
+			alleditorbeatlines[i] = component;
+			component.anchoredPosition3D = new Vector3((i + 1) * defaultnotelength * beatspermeasure, 0f, 0f);
+			if (component.anchoredPosition3D.x > maxbeatlinex)
+			{
+				maxbeatlinex = component.anchoredPosition3D.x;
+			}
+			component = null;
+		}
+	}
+
+	private void buildAllLyrics()
+	{
+		for (int i = 0; i < lyricdata_pos.Count; i++)
+		{
+			enterLyric(lyricdata_pos[i][0], lyricdata_pos[i][1], lyricdata_txt[i], i, addtoarray: false);
+		}
+	}
+
+	private void buildImprovZones()
+	{
+		improv_zone_data.Clear();
+		improv_zone_objects.Clear();
+		for (int i = 0; i < improv_zones.Count; i++)
+		{
+			GameObject gameObject = UnityEngine.Object.Instantiate(single_improvzone, new Vector3(0f, 0f, 0f), Quaternion.identity, noteholder.transform);
+			improv_zone_objects.Add(gameObject);
+			if (i == 0)
+			{
+				improv_zone_to_hide = gameObject;
+			}
+			gameObject.name = "izone" + i;
+			_ = gameObject.transform.GetChild(0).gameObject;
+			GameObject obj = gameObject.transform.GetChild(1).gameObject;
+			float num = (improv_zones[i][1] - improv_zones[i][0]) * (float)defaultnotelength;
+			gameObject.GetComponent<RectTransform>().anchoredPosition3D = new Vector3(improv_zones[i][0] * (float)defaultnotelength, 0f, 0f);
+			obj.GetComponent<RectTransform>().anchoredPosition3D = new Vector3(num, 0f, 0f);
+			LineRenderer component = gameObject.transform.GetChild(2).GetComponent<LineRenderer>();
+			component.positionCount = 2;
+			component.SetPosition(0, new Vector3(-4.5f, 0f, 0f));
+			component.SetPosition(1, new Vector3(num + 4.5f, 0f, 0f));
+			float[] item = new float[2]
+			{
+				improv_zones[i][0] * (float)defaultnotelength,
+				improv_zones[i][0] * (float)defaultnotelength + num
+			};
+			improv_zone_data.Add(item);
+			item = null;
+			gameObject = null;
+		}
+	}
+
+	private void buildNotes()
+	{
+		leveldata.Sort((float[] a, float[] b) => a[0].CompareTo(b[0]));
+		for (int num = 0; num < leveldata.Count; num++)
+		{
+			float[] array = new float[5] { 9999f, 9999f, 9999f, 0f, 9999f };
+			if (num > 0)
+			{
+				array = leveldata[num - 1];
+			}
+			float[] array2 = leveldata[num];
+			bool flag = false;
+			if ((double)Mathf.Abs(array[0] + array[1] - array2[0]) < (double)minimum_note_gap_size)
+			{
+				flag = true;
+			}
+			bool flag2 = false;
+			if (array2[1] <= 0.0625f && tempo > 50f && array2[3] == 0f && !flag)
+			{
+				flag2 = true;
+			}
+			if (array2[1] <= 0f)
+			{
+				array2[1] = 0.015f;
+				leveldata[num][1] = 0.015f;
+			}
+			GameObject gameObject = UnityEngine.Object.Instantiate(singlenote, new Vector3(0f, 0f, 0f), Quaternion.identity, noteholder.transform);
+			gameObject.name = "note" + num;
+			allnotes.Add(gameObject);
+			NoteDesigner component = gameObject.GetComponent<NoteDesigner>();
+			if (flag)
+			{
+				if (!flipscheme)
+				{
+					flipscheme = true;
+				}
+				else
+				{
+					flipscheme = false;
+				}
+			}
+			else
+			{
+				flipscheme = false;
+			}
+			if (!GlobalVariables.localsettings.acc_disablesongbgs)
+			{
+				if (!flipscheme)
+				{
+					component.setColorScheme(note_c_start[0], note_c_start[1], note_c_start[2], note_c_end[0], note_c_end[1], note_c_end[2]);
+				}
+				else if (flipscheme)
+				{
+					component.setColorScheme(note_c_end[0], note_c_end[1], note_c_end[2], note_c_start[0], note_c_start[1], note_c_start[2]);
+				}
+			}
+			else
+			{
+				component.setColorScheme(0.149f, 1f, 1f, 0.149f, 0.8f, 0.8f);
+			}
+			component.enabled = false;
+			component = null;
+			RectTransform component2 = gameObject.GetComponent<RectTransform>();
+			GameObject gameObject2 = gameObject.transform.GetChild(0).gameObject;
+			if (flag)
+			{
+				allnotes[num - 1].transform.GetChild(1).gameObject.SetActive(value: false);
+				gameObject2.SetActive(value: false);
+			}
+			else
+			{
+				gameObject2.SetActive(value: true);
+			}
+			GameObject gameObject3 = gameObject.transform.GetChild(1).gameObject;
+			RectTransform component3 = gameObject3.GetComponent<RectTransform>();
+			LineRenderer[] array3 = new LineRenderer[2]
+			{
+				gameObject.transform.GetChild(2).GetComponent<LineRenderer>(),
+				gameObject.transform.GetChild(3).GetComponent<LineRenderer>()
+			};
+			double num2 = array2[0] * (float)defaultnotelength;
+			component2.anchoredPosition3D = new Vector3((float)num2, array2[2], 0f);
+			if (flag2)
+			{
+				gameObject3.SetActive(value: false);
+			}
+			else
+			{
+				component3.anchoredPosition3D = new Vector3((float)defaultnotelength * array2[1] - (float)levelnotesize + 11.5f, array2[3], 0f);
+			}
+			float[] item = new float[5]
+			{
+				array2[0] * (float)defaultnotelength,
+				array2[0] * (float)defaultnotelength + (float)defaultnotelength * array2[1],
+				array2[2],
+				array2[3],
+				array2[4]
+			};
+			allnotevals.Add(item);
+			float num3 = (float)defaultnotelength * array2[1];
+			float num4 = array2[3];
+			LineRenderer[] array4 = array3;
+			foreach (LineRenderer lineRenderer in array4)
+			{
+				if (!flag2)
+				{
+					if (num4 == 0f)
+					{
+						lineRenderer.positionCount = 2;
+						lineRenderer.SetPosition(0, new Vector3(-3f, 0f, 0f));
+						lineRenderer.SetPosition(1, new Vector3(num3, 0f, 0f));
+						continue;
+					}
+					int num6 = (lineRenderer.positionCount = 16);
+					lineRenderer.SetPosition(0, new Vector3(-3f, 0f, 0f));
+					for (int num8 = 1; num8 < num6; num8++)
+					{
+						lineRenderer.SetPosition(num8, new Vector3(num3 / (float)(num6 - 1) * (float)num8, easeInOutVal(num8, 0f, num4, num6 - 1), 0f));
+					}
+				}
+				else if (flag2)
+				{
+					lineRenderer.enabled = false;
+					lineRenderer.gameObject.SetActive(value: false);
+				}
+			}
+			if (num > beatstoshow && !leveleditor)
+			{
+				gameObject.SetActive(value: false);
+			}
+			array3 = null;
+			gameObject = null;
+			component2 = null;
+			gameObject2 = null;
+			gameObject3 = null;
+			component3 = null;
+		}
+	}
+
+	private void resetNoteColor()
+	{
+		for (int i = 0; i < leveldata.Count; i++)
+		{
+			_ = leveldata[i];
+			allnotes[i].GetComponent<NoteDesigner>().setColorScheme(float.Parse(col_r_1.text), float.Parse(col_g_1.text), float.Parse(col_b_1.text), float.Parse(col_r_2.text), float.Parse(col_g_2.text), float.Parse(col_b_2.text));
+		}
+	}
+
+	private float roundedVal(float val)
+	{
+		return (float)Math.Round((decimal)val, 3);
+	}
+
+	private void repositionNotes()
+	{
+		for (int i = 0; i < leveldata.Count; i++)
+		{
+			float[] array = leveldata[i];
+			GameObject gameObject = allnotes[i];
+			RectTransform component = gameObject.GetComponent<RectTransform>();
+			RectTransform component2 = gameObject.transform.GetChild(1).gameObject.GetComponent<RectTransform>();
+			component.anchoredPosition3D = new Vector3(array[0] * (float)defaultnotelength, array[2], 0f);
+			component2.anchoredPosition3D = new Vector3((float)defaultnotelength * array[1] - (float)levelnotesize + 11.5f, array[3], 0f);
+			float[] item = new float[5]
+			{
+				array[0] * (float)defaultnotelength,
+				array[0] * (float)defaultnotelength + (float)defaultnotelength * array[1],
+				array[2],
+				array[3],
+				array[4]
+			};
+			allnotevals.Add(item);
+			LineRenderer[] componentsInChildren = gameObject.GetComponentsInChildren<LineRenderer>();
+			float num = (float)defaultnotelength * array[1];
+			float c = array[3];
+			LineRenderer[] array2 = componentsInChildren;
+			foreach (LineRenderer lineRenderer in array2)
+			{
+				lineRenderer.SetPosition(0, new Vector3(0f, 0f, 0f));
+				if (lineRenderer.positionCount == 2)
+				{
+					lineRenderer.SetPosition(0, new Vector3(-3f, 0f, 0f));
+					lineRenderer.SetPosition(1, new Vector3(num, 0f, 0f));
+					continue;
+				}
+				for (int k = 1; k < 8; k++)
+				{
+					lineRenderer.SetPosition(k, new Vector3(num / 7f * (float)k, easeInOutVal(k, 0f, c, 7f), 0f));
+				}
+			}
+			gameObject = null;
+			component = null;
+		}
+	}
+
+	public void goBeatless()
+	{
+		beatless = true;
+		for (int i = 0; i < numbeatlines; i++)
+		{
+			allbeatlines[i].gameObject.SetActive(value: false);
+		}
+		LeanTween.cancel(leftboundsglow);
+		LeanTween.scaleX(leftboundsglow, 0.001f, 0.25f).setEaseOutQuad();
+	}
+
+	private void buildLevel()
+	{
+		tryToLoadLevel(GlobalVariables.chosen_track, custom_level);
+		currentnoteindex = 0;
+		for (int i = 0; i < numbeatlines; i++)
+		{
+			RectTransform component = UnityEngine.Object.Instantiate(beatline, new Vector3(0f, 0f, 0f), Quaternion.identity, noteholder.transform).GetComponent<RectTransform>();
+			allbeatlines[i] = component;
+			component.anchoredPosition3D = new Vector3((i + 1) * defaultnotelength * beatspermeasure, 0f, 0f);
+			if (component.anchoredPosition3D.x > maxbeatlinex)
+			{
+				maxbeatlinex = component.anchoredPosition3D.x;
+			}
+			component = null;
+		}
+		grabNoteRefs(0);
+	}
+
+	private void getScoreAverage()
+	{
+		float num = notescoreaverage;
+		float num2 = Mathf.Clamp(total_length_of_active_notes, 0.2f, 5f) * 8f + 10f;
+		float num3 = 0f;
+		if (rainbowcontroller.champmode)
+		{
+			num3 = 1.5f;
+		}
+		float num4 = Mathf.Floor(num2 * num * (((float)multiplier + num3) * 0.1f + 1f)) * 10f;
+		if (num4 < 0f)
+		{
+			num4 = 0f;
+		}
+		if (!gameplay_settings.acc_autotoot)
+		{
+			totalscore += Mathf.FloorToInt(num4);
+		}
+		else if (gameplay_settings.acc_autotoot)
+		{
+			totalscore += Mathf.FloorToInt(num4 * 0.5f);
+		}
+		float healthchange = Mathf.Clamp((num - 79f) * 0.2193f, -15f, 4.34f);
+		if (!released_button_between_notes || force_no_gap_gameobject_to_appear)
+		{
+			healthchange = -15f;
+		}
+		affectHealthBar(healthchange);
+		if (num > 95f)
+		{
+			doScoreText(4, num);
+		}
+		else if (num > 88f)
+		{
+			doScoreText(3, num);
+		}
+		else if (num > 79f)
+		{
+			doScoreText(2, num);
+		}
+		else if (num > 70f)
+		{
+			doScoreText(1, num);
+		}
+		else
+		{
+			doScoreText(0, num);
+		}
+		notescoreaverage = 0f;
+		notescoresamples = 0f;
+		notescoretotal = 0f;
+		total_length_of_active_notes = 0f;
+	}
+
+	private void affectHealthBar(float healthchange)
+	{
+		if (currenthealth < 100f && currenthealth + healthchange >= 100f)
+		{
+			maxScoreEffect(entering: true);
+			playGoodSound();
+		}
+		else if (currenthealth >= 100f && currenthealth + healthchange < 100f)
+		{
+			maxScoreEffect(entering: false);
+			currenthealth = 0f;
+			sfxrefs.slidedown.Play();
+		}
+		currenthealth += healthchange;
+		if (currenthealth > 100f)
+		{
+			currenthealth = 100f;
+		}
+		else if (currenthealth < 0f)
+		{
+			currenthealth = 0f;
+		}
+		int num = Mathf.FloorToInt(currenthealth * 0.1f) - champcontroller.healthcounter;
+		for (int i = 0; i < Mathf.Abs(num); i++)
+		{
+			if (num > 0)
+			{
+				champcontroller.advanceCounter(1);
+			}
+			else if (num < 0)
+			{
+				champcontroller.advanceCounter(-1);
+			}
+		}
+	}
+
+	private void maxScoreEffect(bool entering)
+	{
+		if (entering)
+		{
+			rainbowcontroller.startRainbowLess();
+			if (!GlobalVariables.localsettings.acc_reduceflashing && !GlobalVariables.localsettings.acc_nochampbloom)
+			{
+				LeanTween.value(0f, 7f, 0.25f).setEaseOutQuart().setOnUpdate(delegate(float val)
+				{
+					BloomModel.Settings settings = gameplayppp.bloom.settings;
+					settings.bloom.intensity = val;
+					gameplayppp.bloom.settings = settings;
+				})
+					.setOnComplete((Action)delegate
+					{
+						LeanTween.value(7f, 0f, 0.75f).setEaseInQuad().setOnUpdate(delegate(float val)
+						{
+							BloomModel.Settings settings = gameplayppp.bloom.settings;
+							settings.bloom.intensity = val;
+							gameplayppp.bloom.settings = settings;
+						});
+					});
+			}
+			if (!GlobalVariables.localsettings.acc_reduceflashing)
+			{
+				champ_bloom_rotation = 0f;
+				champ_bloom_gameobject.SetActive(value: true);
+				champ_bloom_gameobject.transform.localScale = new Vector3(0.1f, 0.0001f, 1f);
+				LeanTween.scale(champ_bloom_gameobject, new Vector3(1.1f, 0.45f, 1f), 0.1f).setEaseOutQuart().setOnComplete((Action)delegate
+				{
+					LeanTween.scale(champ_bloom_gameobject, new Vector3(0.01f, 0.001f, 1f), 1.1f).setEaseInQuart().setOnComplete(hideChampBloomObj);
+				});
+			}
+		}
+		else if (!entering)
+		{
+			rainbowcontroller.stopRainbow();
+		}
+	}
+
+	private void hideChampBloomObj()
+	{
+		champ_bloom_gameobject.SetActive(value: false);
+	}
+
+	private void doScoreText(int whichtext, float notescore)
+	{
+		string text = "";
+		if (!released_button_between_notes || force_no_gap_gameobject_to_appear)
+		{
+			if (whichtext > 2)
+			{
+				whichtext = 2;
+			}
+			LeanTween.cancel(no_gap_gameobject);
+			no_gap_gameobject.transform.localScale = new Vector3(0.001f, 0.001f, 1f);
+			LeanTween.scale(no_gap_gameobject, new Vector3(1f, 1f, 1f), 0.1f).setEaseOutQuart();
+			if (max_star_gameobject.transform.localScale.x > 0.1f)
+			{
+				LeanTween.cancel(max_star_gameobject);
+				max_star_gameobject.transform.localScale = new Vector3(0f, 0f, 1f);
+			}
+		}
+		else if (released_button_between_notes && no_gap_gameobject.transform.localScale.x > 0.1f)
+		{
+			LeanTween.cancel(no_gap_gameobject);
+			no_gap_gameobject.transform.localScale = new Vector3(0f, 0f, 1f);
+		}
+		force_no_gap_gameobject_to_appear = false;
+		switch (whichtext)
+		{
+		case 4:
+			scores_A++;
+			text = note_end_strings[0];
+			break;
+		case 3:
+			scores_B++;
+			text = note_end_strings[1];
+			break;
+		case 2:
+			scores_C++;
+			text = note_end_strings[2];
+			break;
+		case 1:
+			scores_D++;
+			text = note_end_strings[3];
+			break;
+		case 0:
+			scores_F++;
+			text = note_end_strings[4];
+			break;
+		}
+		if (whichtext > 2)
+		{
+			multiplier++;
+			highestcombocounter++;
+			if (highestcombocounter > highestcombo_level)
+			{
+				updateHighestCombo(highestcombocounter);
+			}
+			if (multiplier > max_multiplier)
+			{
+				multiplier = max_multiplier;
+			}
+		}
+		else
+		{
+			GlobalVariables.gameplay_perfect = false;
+			multiplier = 0;
+			highestcombocounter = 0;
+		}
+		float[] item = new float[3] { notescore, multiplier, currentnotetimestamp };
+		GlobalVariables.gameplay_allnotescores.Add(item);
+		animateOutNote(currentnoteindex, whichtext);
+		popuptext.text = text;
+		popuptextshadow.text = text;
+		multtexthide = 0f;
+		if (multiplier > 0)
+		{
+			multtext.text = "<i>" + multiplier + "<size=28>x</size></i>";
+			multtextshadow.text = "<i>" + multiplier + "<size=28>x</size></i>";
+			LeanTween.cancel(multtextobj);
+			multtextobj.transform.localScale = new Vector3(0.001f, 0.001f, 1f);
+			LeanTween.scale(multtextobj, new Vector3(1f, 1f, 1f), 0.1f).setEaseOutQuart();
+			popuptext_rect.anchoredPosition3D = new Vector3(0f, popuptext_ypos, 0f);
+			nogap_rect.anchoredPosition3D = new Vector3(0f, popuptext_ypos + 3f, 0f);
+		}
+		else
+		{
+			popuptext_rect.anchoredPosition3D = new Vector3(0f, popuptext_ypos - 20f, 0f);
+			nogap_rect.anchoredPosition3D = new Vector3(0f, popuptext_ypos + 3f - 20f, 0f);
+			multtext.text = "";
+			multtextshadow.text = "";
+		}
+		if (multiplier >= max_multiplier)
+		{
+			LeanTween.cancel(max_star_gameobject);
+			if (highestcombocounter < 100)
+			{
+				max_star_rect.anchoredPosition3D = new Vector3(42f, -3f, -1f);
+			}
+			else
+			{
+				max_star_rect.anchoredPosition3D = new Vector3(49f, -1f, -1f);
+			}
+			max_star_gameobject.transform.localScale = new Vector3(0.001f, 0.001f, 1f);
+			LeanTween.scale(max_star_gameobject, new Vector3(0.26f, 0.28f, 1f), 0.1f).setEaseOutQuart();
+		}
+		else
+		{
+			max_star_gameobject.transform.localScale = new Vector3(0f, 0f, 1f);
+		}
+		LeanTween.cancel(popuptextobj);
+		popuptextobj.transform.localScale = new Vector3(0.001f, 0.001f, 1f);
+		LeanTween.scale(popuptextobj, new Vector3(1f, 1f, 1f), 0.1f).setEaseOutQuart();
+		switch (whichtext)
+		{
+		case 4:
+			popuptext.color = new Color(1f, 1f, 0.95f, 1f);
+			popuptextshadow.color = new Color(0.28f, 0.27f, 0f, 1f);
+			break;
+		case 0:
+			popuptext.color = new Color(1f, 1f, 1f, 1f);
+			popuptextshadow.color = new Color(0.23f, 0.11f, 0.05f, 1f);
+			break;
+		default:
+			popuptext.color = new Color(1f, 1f, 1f, 1f);
+			popuptextshadow.color = new Color(0f, 0f, 0f, 1f);
+			break;
+		}
+	}
+
+	private void hideMultText()
+	{
+		LeanTween.cancel(popuptextobj);
+		LeanTween.cancel(multtextobj);
+		LeanTween.scale(popuptextobj, new Vector3(0f, 1f, 1f), 0.09f).setEaseInQuart();
+		LeanTween.scale(multtextobj, new Vector3(0f, 1f, 1f), 0.09f).setEaseInQuart();
+		if (max_star_gameobject.transform.localScale.x > 0.1f)
+		{
+			LeanTween.cancel(max_star_gameobject);
+			LeanTween.scale(max_star_gameobject, new Vector3(0f, 0.25f, 1f), 0.09f).setEaseInQuart();
+		}
+		if (no_gap_gameobject.transform.localScale.x > 0.1f)
+		{
+			LeanTween.cancel(no_gap_gameobject);
+			LeanTween.scale(no_gap_gameobject, new Vector3(0f, 0.25f, 1f), 0.09f).setEaseInQuart();
+		}
+	}
+
+	private void updateHighestCombo(int thecombo)
+	{
+		highestcombo_level = thecombo;
+		LeanTween.cancel(highestcomboobj);
+		highestcomboobj.transform.localScale = new Vector3(1.5f, 1.2f, 1f);
+		LeanTween.scale(highestcomboobj, new Vector3(1f, 1f, 1f), 0.1f).setEaseOutQuart();
+		highestcombo.text = highest_combo_text + ": <color=#ffff00>" + thecombo + "</color>";
+		highestcomboshad.text = highest_combo_text + ": " + thecombo;
+	}
+
+	private void playGoodSound()
+	{
+		sfxrefs.ahorn5.Play();
+	}
+
+	private void grabNoteRefs(int indexinc)
+	{
+		if (currentnoteindex + 1 < allnotevals.Count)
+		{
+			if (Mathf.Abs(leveldata[currentnoteindex + 1][0] - (leveldata[currentnoteindex][0] + leveldata[currentnoteindex][1])) < minimum_note_gap_size)
+			{
+				if (currentnoteindex > 0 && Mathf.Abs(leveldata[currentnoteindex][0] - (leveldata[currentnoteindex - 1][0] + leveldata[currentnoteindex - 1][1])) > minimum_note_gap_size && !released_button_between_notes && !released_during_timing_window)
+				{
+					force_no_gap_gameobject_to_appear = true;
+				}
+				released_button_between_notes = true;
+			}
+			else
+			{
+				released_button_between_notes = false;
+			}
+		}
+		currentnoteindex += indexinc;
+		if (currentnoteindex > allnotevals.Count - 1)
+		{
+			currentnotestart = 9999999f;
+			currentnoteend = 100000000f;
+			return;
+		}
+		float[] array = allnotevals[currentnoteindex];
+		currentnotestart = array[0];
+		currentnoteend = array[1];
+		currentnotestarty = array[2];
+		currentnotepshift = array[3];
+		currentnoteendy = array[4];
+	}
+
+	private void tallyScore(float deltaTime)
+	{
+		currentscore += (int)Mathf.Floor(194567f * deltaTime);
+		ui_score.text = currentscore.ToString("n0");
+		ui_score_shadow.text = currentscore.ToString("n0");
+		if (!previous_high_score_surpassed && currentscore > previous_high_score)
+		{
+			previous_high_score_surpassed = true;
+			previous_high_gameobject.SetActive(value: true);
+			previous_high_gameobject.transform.localScale = new Vector3(2f, 2f, 1f);
+			LeanTween.scale(previous_high_gameobject, new Vector3(1f, 1f, 1f), 0.12f).setEaseOutQuart();
+			ui_score_shadow.transform.localScale = new Vector3(1.5f, 1f, 2f);
+			LeanTween.scale(ui_score_shadow.gameObject, new Vector3(1f, 1f, 1f), 0.12f).setEaseOutQuart();
+			ui_score.color = new Color(1f, 1f, 0f, 1f);
+		}
+		if (currentscore > totalscore)
+		{
+			currentscore = totalscore;
+			ui_score.text = currentscore.ToString("n0");
+			ui_score_shadow.text = currentscore.ToString("n0");
+		}
+	}
+
+	private void moveCursor(int dir)
+	{
+		editornoteindex -= dir;
+		if (editornoteindex > 13)
+		{
+			editornoteindex = -13;
+		}
+		else if (editornoteindex < -13)
+		{
+			editornoteindex = 13;
+		}
+		float num = vbounds / 12f;
+		pointer.transform.localPosition = new Vector3(zeroxpos, num * (float)editornoteindex, 0f);
+	}
+
+	public void toggleEditorAutoplay()
+	{
+		if (!autoplay)
+		{
+			autoplay = true;
+			autoplaytxt.text = "Autoplay ON";
+		}
+		else
+		{
+			autoplay = false;
+			autoplaytxt.text = "Autoplay OFF";
+		}
+	}
+
+	private void changeEditorTempo(int dir)
+	{
+		tempo += dir;
+		if (tempo < 10f)
+		{
+			tempo = 10f;
+		}
+		editortempotext.text = "tempo: " + tempo;
+	}
+
+	private void changeTimeSig(int dir)
+	{
+		beatspermeasure += dir;
+		if (beatspermeasure < 1)
+		{
+			beatspermeasure = 4;
+		}
+		editortsigtext.text = "t_sig: " + beatspermeasure;
+	}
+
+	private void changeLineSpacing(bool reposition, int dir)
+	{
+		defaultnotelength += dir * 10;
+		if (defaultnotelength < 20)
+		{
+			defaultnotelength = 20;
+		}
+		else if (defaultnotelength > 900)
+		{
+			defaultnotelength = 900;
+		}
+		editorspacingtext.text = "spacing: " + defaultnotelength;
+		if (reposition)
+		{
+			for (int i = 0; i < 500; i++)
+			{
+				alleditorbeatlines[i].anchoredPosition3D = new Vector3((i + 1) * defaultnotelength * beatspermeasure, 0f, 0f);
+			}
+			repositionNotes();
+			float num = (editorposition = Mathf.Floor((noteholderr.anchoredPosition3D.x - zeroxpos) / (float)(-defaultnotelength)));
+			LeanTween.moveLocal(noteholder, new Vector3(zeroxpos - num * (float)defaultnotelength, 0f, 0f), 0.15f).setEaseInOutQuad();
+		}
+	}
+
+	private void changeEditorTime(int dir)
+	{
+		float[] array = new float[12]
+		{
+			8f,
+			4f,
+			2f,
+			1f,
+			0.5f,
+			1f / 3f,
+			0.25f,
+			0.2f,
+			0.125f,
+			1f / 6f,
+			1f / 12f,
+			0.0625f
+		};
+		lengthindex += dir;
+		if (lengthindex < 0)
+		{
+			lengthindex = array.Length - 1;
+		}
+		else if (lengthindex >= array.Length)
+		{
+			lengthindex = 0;
+		}
+		editorlength = array[lengthindex];
+		editorlengthtext.text = "dur: " + editorlength;
+	}
+
+	private void moveTimeline(int dir)
+	{
+		editorposition += (float)dir * editorlength;
+		if (editorposition < 0f)
+		{
+			editorposition = 0f;
+		}
+		LeanTween.moveLocalX(noteholder, zeroxpos - editorposition * (float)defaultnotelength, 0.1f).setEaseInOutQuad();
+		editorpostext.text = "time: " + editorposition;
+	}
+
+	private void tryToDeleteNote()
+	{
+		for (int i = 0; i < leveldata.Count; i++)
+		{
+			float[] array = leveldata[i];
+			if (editorposition >= array[0] && editorposition <= array[0] + array[1])
+			{
+				leveldata.RemoveAt(i);
+				UnityEngine.Object.Destroy(allnotes[i]);
+				allnotes.RemoveAt(i);
+				break;
+			}
+		}
+	}
+
+	private void tryToDeleteLyric(bool allyrics)
+	{
+		logMessage("Looking for lyrics to delete...");
+		if (alllyrics.Count == 0)
+		{
+			logMessage("- Oh, for crying in a cup!... there aren't any lyrics to delete!");
+		}
+		for (int i = 0; i < alllyrics.Count; i++)
+		{
+			lyricdata_pos.RemoveAt(i);
+			lyricdata_txt.RemoveAt(i);
+			UnityEngine.Object.Destroy(alllyrics[i]);
+			alllyrics.RemoveAt(i);
+		}
+		alllyrics.Clear();
+	}
+
+	private void tryToDeleteBGThing()
+	{
+		for (int i = 0; i < bgdata.Count; i++)
+		{
+			float[] array = bgdata[i];
+			logMessage(editorposition + ", " + array[2]);
+			if (editorposition == array[2])
+			{
+				bgdata.RemoveAt(i);
+				UnityEngine.Object.Destroy(bgobjs[i]);
+				bgobjs.RemoveAt(i);
+				break;
+			}
+			array = null;
+		}
+	}
+
+	private void buildAllBGNodes()
+	{
+		bgobjs.Clear();
+		for (int i = 0; i < bgdata.Count; i++)
+		{
+			float[] array = bgdata[i];
+			int num = (int)array[1];
+			float num2 = array[2];
+			GameObject gameObject = UnityEngine.Object.Instantiate(singlebg, new Vector3(0f, 0f, 0f), Quaternion.identity, lyricsholder.transform);
+			bgobjs.Add(gameObject);
+			RectTransform component = gameObject.GetComponent<RectTransform>();
+			gameObject.transform.GetChild(0).GetComponent<Text>().text = num.ToString();
+			component.anchoredPosition3D = new Vector3(num2 * (float)defaultnotelength, 18f, 0f);
+			gameObject = null;
+		}
+	}
+
+	private void clickBG(int bgbtn)
+	{
+		float num = editorposition;
+		logMessage("ENTERING BG_ACTION" + bgbtn + " at " + num + " beat");
+		GameObject gameObject = UnityEngine.Object.Instantiate(singlebg, new Vector3(0f, 0f, 0f), Quaternion.identity, lyricsholder.transform);
+		bgobjs.Add(gameObject);
+		RectTransform component = gameObject.GetComponent<RectTransform>();
+		gameObject.transform.GetChild(0).GetComponent<Text>().text = bgbtn.ToString();
+		component.anchoredPosition3D = new Vector3(num * (float)defaultnotelength, 18f, 0f);
+		float[] item = new float[3]
+		{
+			60f / tempo * num,
+			bgbtn,
+			num
+		};
+		bgdata.Add(item);
+		logMessage("bgdata length = " + bgdata.Count);
+		item = null;
+		gameObject = null;
+	}
+
+	private void enterLyric(float xpos, float ypos, string word, int lyricindex, bool addtoarray)
+	{
+		logMessage("ENTERING " + word + " at " + xpos + " beat, " + ypos + " position");
+		GameObject gameObject = UnityEngine.Object.Instantiate(singlelyric, new Vector3(0f, 0f, 0f), Quaternion.identity, lyricsholder.transform);
+		RectTransform component = gameObject.GetComponent<RectTransform>();
+		Text component2 = gameObject.transform.GetChild(1).GetComponent<Text>();
+		Text component3 = gameObject.transform.GetChild(0).GetComponent<Text>();
+		component2.text = word;
+		component3.text = word;
+		component.anchoredPosition3D = new Vector3(xpos * (float)defaultnotelength, 0f, 0f);
+		if (addtoarray)
+		{
+			alllyrics.Add(gameObject);
+			float[] item = new float[2] { xpos, ypos };
+			lyricdata_pos.Add(item);
+			lyricdata_txt.Add(word);
+		}
+		else
+		{
+			alllyrics.Add(gameObject);
+			alllyrics_rects.Add(component);
+			if (lyricindex > lyric_occlusion_count)
+			{
+				gameObject.SetActive(value: false);
+			}
+		}
+		component = null;
+		gameObject = null;
+		component2 = null;
+	}
+
+	private void enterEndpoint()
+	{
+		logMessage("ENTERING ENDPOINT at " + editorposition);
+		levelendpoint = editorposition;
+		editorendpostext.text = "end: " + levelendpoint;
+	}
+
+	private void enterNote()
+	{
+		if (enterindex == 0)
+		{
+			if (true)
+			{
+				startvals[0] = editorposition;
+				startvals[1] = pointerrect.transform.localPosition.y;
+				enterindex = 1;
+			}
+			return;
+		}
+		endvals[0] = editorposition;
+		endvals[1] = pointerrect.transform.localPosition.y;
+		if (endvals[0] <= startvals[0])
+		{
+			logMessage("note doesn't move forwards");
+			return;
+		}
+		float[] array = new float[5]
+		{
+			startvals[0],
+			endvals[0] - startvals[0],
+			startvals[1],
+			endvals[1] - startvals[1],
+			endvals[1]
+		};
+		bool flag = false;
+		for (int i = 0; i < leveldata.Count; i++)
+		{
+			if (leveldata[i][0] > startvals[0])
+			{
+				logMessage("You inserted a note BEFORE note at index " + i);
+				flag = true;
+				leveldata.Insert(i, array);
+				break;
+			}
+		}
+		if (!flag)
+		{
+			leveldata.Add(array);
+		}
+		logMessage("FULL LIST OF STARTING VALUES");
+		for (int j = 0; j < leveldata.Count; j++)
+		{
+			logMessage("-> " + leveldata[j][0]);
+		}
+		GameObject gameObject = UnityEngine.Object.Instantiate(singlenote, new Vector3(0f, 0f, 0f), Quaternion.identity, noteholder.transform);
+		allnotes.Add(gameObject);
+		RectTransform component = gameObject.GetComponent<RectTransform>();
+		RectTransform component2 = gameObject.transform.GetChild(1).gameObject.GetComponent<RectTransform>();
+		_ = gameObject.transform.GetChild(2).gameObject;
+		LineRenderer[] componentsInChildren = gameObject.GetComponentsInChildren<LineRenderer>();
+		component.anchoredPosition3D = new Vector3(array[0] * (float)defaultnotelength, array[2], 0f);
+		component2.anchoredPosition3D = new Vector3((float)defaultnotelength * array[1] - (float)levelnotesize, array[3], 0f);
+		float[] item = new float[5]
+		{
+			array[0] * (float)defaultnotelength,
+			array[0] * (float)defaultnotelength + (float)defaultnotelength * array[1],
+			array[2],
+			array[3],
+			array[4]
+		};
+		allnotevals.Add(item);
+		float num = (float)defaultnotelength * array[1];
+		float c = array[3];
+		LineRenderer[] array2 = componentsInChildren;
+		foreach (LineRenderer lineRenderer in array2)
+		{
+			lineRenderer.SetPosition(0, new Vector3(0f, 0f, 0f));
+			for (int l = 1; l < 10; l++)
+			{
+				lineRenderer.SetPosition(l, new Vector3(num / 9f * (float)l, easeInOutVal(l, 0f, c, 9f), 0f));
+			}
+		}
+		componentsInChildren = null;
+		gameObject = null;
+		component2 = null;
+		enterindex = 0;
+	}
+
+	private void pasteNote(float[] notevals)
+	{
+		leveldata.Add(notevals);
+		GameObject gameObject = UnityEngine.Object.Instantiate(singlenote, new Vector3(0f, 0f, 0f), Quaternion.identity, noteholder.transform);
+		allnotes.Add(gameObject);
+		RectTransform component = gameObject.GetComponent<RectTransform>();
+		RectTransform component2 = gameObject.transform.GetChild(1).gameObject.GetComponent<RectTransform>();
+		_ = gameObject.transform.GetChild(2).gameObject;
+		LineRenderer[] componentsInChildren = gameObject.GetComponentsInChildren<LineRenderer>();
+		component.anchoredPosition3D = new Vector3(notevals[0] * (float)defaultnotelength, notevals[2], 0f);
+		component2.anchoredPosition3D = new Vector3((float)defaultnotelength * notevals[1] - (float)levelnotesize, notevals[3], 0f);
+		float[] item = new float[5]
+		{
+			notevals[0] * (float)defaultnotelength,
+			notevals[0] * (float)defaultnotelength + (float)defaultnotelength * notevals[1],
+			notevals[2],
+			notevals[3],
+			notevals[4]
+		};
+		allnotevals.Add(item);
+		float num = (float)defaultnotelength * notevals[1];
+		float c = notevals[3];
+		LineRenderer[] array = componentsInChildren;
+		foreach (LineRenderer lineRenderer in array)
+		{
+			lineRenderer.SetPosition(0, new Vector3(0f, 0f, 0f));
+			for (int j = 1; j < 10; j++)
+			{
+				lineRenderer.SetPosition(j, new Vector3(num / 9f * (float)j, easeInOutVal(j, 0f, c, 9f), 0f));
+			}
+		}
+		componentsInChildren = null;
+		gameObject = null;
+		component2 = null;
+		enterindex = 0;
+	}
+
+	private void playFromPlayhead()
+	{
+		if (!playingineditor)
+		{
+			float num = Mathf.Abs(noteholderr.anchoredPosition3D.x - zeroxpos);
+			bool flag = false;
+			for (int num2 = allnotevals.Count - 1; num2 > -1; num2--)
+			{
+				if (num >= allnotevals[num2][0])
+				{
+					logMessage("editor starts on note: " + num2);
+					currentnoteindex = num2;
+					grabNoteRefs(0);
+					flag = true;
+					break;
+				}
+			}
+			if (!flag)
+			{
+				logMessage("editor starts on note: 0");
+				currentnoteindex = 0;
+				grabNoteRefs(0);
+			}
+			trackmovemult = tempo / 60f * (float)defaultnotelength;
+			float time = (noteholderr.anchoredPosition3D.x - zeroxpos) / (0f - (float)trackmovemult);
+			musictrack.time = time;
+			musictrack.Play();
+			float track_time = musictrack.time - latency_offset - noteoffset;
+			syncTrackPositions(track_time);
+			playingineditor = true;
+		}
+		else if (playingineditor)
+		{
+			float num3 = (editorposition = Mathf.Floor((noteholderr.anchoredPosition3D.x - zeroxpos) / (float)(-defaultnotelength)));
+			editorpostext.text = "time: " + editorposition;
+			playingineditor = false;
+			musictrack.Stop();
+			LeanTween.moveLocal(noteholder, new Vector3(zeroxpos - num3 * (float)defaultnotelength, 0f, 0f), 0.15f).setEaseInOutQuad();
+		}
+	}
+
+	private void animatePlayerDot()
+	{
+		pointercolorindex++;
+		if (pointercolorindex > 3)
+		{
+			pointercolorindex = 0;
+		}
+		if (pointercolorindex == 0)
+		{
+			pointerimg.color = new Color32(byte.MaxValue, 54, 92, byte.MaxValue);
+		}
+		if (pointercolorindex == 1)
+		{
+			pointerimg.color = new Color32(35, 194, 201, byte.MaxValue);
+		}
+		if (pointercolorindex == 2)
+		{
+			pointerimg.color = new Color32(byte.MaxValue, byte.MaxValue, 0, byte.MaxValue);
+		}
+		if (pointercolorindex == 3)
+		{
+			pointerimg.color = new Color32(byte.MaxValue, 171, 0, byte.MaxValue);
+		}
+	}
+
+	private SavedLevel CreateSaveGameObject()
+	{
+		SavedLevel savedLevel = new SavedLevel();
+		savedLevel.lyricspos = lyricdata_pos;
+		savedLevel.lyricstxt = lyricdata_txt;
+		note_c_start = new float[3]
+		{
+			float.Parse(col_r_1.text),
+			float.Parse(col_g_1.text),
+			float.Parse(col_b_1.text)
+		};
+		note_c_end = new float[3]
+		{
+			float.Parse(col_r_2.text),
+			float.Parse(col_g_2.text),
+			float.Parse(col_b_2.text)
+		};
+		savedLevel.note_color_start = note_c_start;
+		savedLevel.note_color_end = note_c_end;
+		savedLevel.bgdata = bgdata;
+		savedLevel.savedleveldata = leveldata;
+		savedLevel.tempo = tempo;
+		savedLevel.endpoint = levelendpoint;
+		savedLevel.timesig = beatspermeasure;
+		savedLevel.savednotespacing = defaultnotelength;
+		if ((bool)leveleditor_script && leveleditor_script.improv_zones.Count > 0)
+		{
+			savedLevel.improv_zones = leveleditor_script.improv_zones;
+		}
+		return savedLevel;
+	}
+
+	private void tryToLoadLevel(string filename, bool customtrack = false)
+	{
+		string text = ((!customtrack) ? (SaverLoader.removeFinalBackSlash(GlobalVariables.chosen_track_data.track_folder) + "/trackdata.tmb") : ((GlobalVariables.customtrack_paths != null) ? GlobalVariables.customtrack_paths[0] : (GlobalVariables.chosen_track_data.track_folder + "/song.tmb")));
+		if (File.Exists(text))
+		{
+			if (customtrack)
+			{
+				SongDataCustom songDataCustom = JsonConvert.DeserializeObject<SongDataCustom>(File.ReadAllText(text));
+				SavedLevel savedLevel = new SavedLevel();
+				savedLevel.savedleveldata.Clear();
+				float[][] notes = songDataCustom.notes;
+				foreach (float[] item in notes)
+				{
+					savedLevel.savedleveldata.Add(item);
+				}
+				savedLevel.bgdata.Clear();
+				if (songDataCustom.bgdata != null && songDataCustom.bgdata.Length != 0)
+				{
+					notes = songDataCustom.bgdata;
+					foreach (float[] item2 in notes)
+					{
+						savedLevel.bgdata.Add(item2);
+					}
+				}
+				savedLevel.lyricspos.Clear();
+				savedLevel.lyricstxt.Clear();
+				if (songDataCustom.lyrics != null && songDataCustom.lyrics.Length != 0)
+				{
+					for (int j = 0; j < songDataCustom.lyrics.Length; j++)
+					{
+						float[] item3 = new float[2]
+						{
+							songDataCustom.lyrics[j].bar,
+							-165f
+						};
+						savedLevel.lyricspos.Add(item3);
+						savedLevel.lyricstxt.Add(songDataCustom.lyrics[j].text);
+					}
+				}
+				if (songDataCustom.improv_zones != null && songDataCustom.improv_zones.Length != 0)
+				{
+					for (int k = 0; k < songDataCustom.improv_zones.Length; k++)
+					{
+						savedLevel.improv_zones.Add(songDataCustom.improv_zones[k]);
+					}
+				}
+				if (songDataCustom.note_color_start == null)
+				{
+					savedLevel.note_color_start = new float[3] { 0.95f, 0.22f, 0.35f };
+					savedLevel.note_color_end = new float[3] { 0.15f, 1f, 1f };
+				}
+				else
+				{
+					savedLevel.note_color_start = songDataCustom.note_color_start;
+					savedLevel.note_color_end = songDataCustom.note_color_end;
+				}
+				savedLevel.endpoint = songDataCustom.endpoint;
+				savedLevel.tempo = songDataCustom.tempo;
+				savedLevel.savednotespacing = songDataCustom.savednotespacing;
+				savedLevel.timesig = songDataCustom.timesig;
+				bgdata.Clear();
+				bgdata = savedLevel.bgdata;
+				leveldata.Clear();
+				leveldata = savedLevel.savedleveldata;
+				lyricdata_pos = savedLevel.lyricspos;
+				lyricdata_txt = savedLevel.lyricstxt;
+				improv_zones.Clear();
+				if (savedLevel.improv_zones != null && savedLevel.improv_zones.Count > 0)
+				{
+					improv_zones = savedLevel.improv_zones;
+				}
+				if (savedLevel.note_color_start != null)
+				{
+					note_c_start = savedLevel.note_color_start;
+					note_c_end = savedLevel.note_color_end;
+				}
+				levelendpoint = savedLevel.endpoint;
+				tempo = savedLevel.tempo;
+				defaultnotelength = savedLevel.savednotespacing;
+				defaultnotelength = Mathf.FloorToInt((float)defaultnotelength * GlobalVariables.gamescrollspeed);
+				beatspermeasure = savedLevel.timesig;
+				savedLevel = null;
+			}
+			else if (!customtrack && filename != "EDITOR_MIDI")
+			{
+				BinaryFormatter binaryFormatter = new BinaryFormatter();
+				FileStream fileStream = File.Open(text, FileMode.Open);
+				SavedLevel savedLevel2 = (SavedLevel)binaryFormatter.Deserialize(fileStream);
+				fileStream.Close();
+				fileStream = null;
+				bgdata.Clear();
+				bgdata = savedLevel2.bgdata;
+				leveldata.Clear();
+				leveldata = savedLevel2.savedleveldata;
+				improv_zones.Clear();
+				if (savedLevel2.improv_zones != null && savedLevel2.improv_zones.Count > 0)
+				{
+					improv_zones = savedLevel2.improv_zones;
+				}
+				lyricdata_pos = savedLevel2.lyricspos;
+				lyricdata_txt = savedLevel2.lyricstxt;
+				if (savedLevel2.note_color_start != null)
+				{
+					note_c_start = savedLevel2.note_color_start;
+					note_c_end = savedLevel2.note_color_end;
+					if (leveleditor)
+					{
+						col_r_1.text = note_c_start[0].ToString();
+						col_g_1.text = note_c_start[1].ToString();
+						col_b_1.text = note_c_start[2].ToString();
+						col_r_2.text = note_c_end[0].ToString();
+						col_g_2.text = note_c_end[1].ToString();
+						col_b_2.text = note_c_end[2].ToString();
+					}
+				}
+				levelendpoint = savedLevel2.endpoint;
+				if (leveleditor)
+				{
+					editorendpostext.text = "end: " + levelendpoint;
+				}
+				tempo = savedLevel2.tempo;
+				defaultnotelength = savedLevel2.savednotespacing;
+				defaultnotelength = Mathf.FloorToInt((float)defaultnotelength * GlobalVariables.gamescrollspeed);
+				beatspermeasure = savedLevel2.timesig;
+				savedLevel2 = null;
+			}
+			if (leveleditor)
+			{
+				buildAllBGNodes();
+				changeEditorTempo(0);
+				changeTimeSig(0);
+			}
+			buildNotes();
+			buildAllLyrics();
+			if (improv_zones != null && improv_zones.Count > 0)
+			{
+				buildImprovZones();
+			}
+			float num = levelendpoint - (leveldata[leveldata.Count - 1][0] + leveldata[leveldata.Count - 1][1]);
+			if (num < 1f)
+			{
+				levelendpoint += 1f - num;
+			}
+			levelendtime = 60f / tempo * levelendpoint;
+			levelendtime += latency_offset;
+			logMessage("Level Loaded!!");
+		}
+		else
+		{
+			Debug.LogError("Could not find level data file at: " + text);
+		}
+	}
+
+	private void Update()
+	{
+		if (multtexthide > -1f)
+		{
+			multtexthide += 1f * Time.deltaTime;
+			if (multtexthide > 1.5f)
+			{
+				multtexthide = -1f;
+				hideMultText();
+			}
+		}
+		float num = 831f;
+		float num2 = currenthealth * 0.01f;
+		float x = healthfill.anchoredPosition.x;
+		float num3 = (-927f + num2 * num - x) * (12f * Time.deltaTime);
+		healthposy += 100f * Time.deltaTime;
+		if (healthposy > 685f)
+		{
+			healthposy = -342f;
+		}
+		healthfill.anchoredPosition3D = new Vector3(x + num3, healthposy, 0f);
+		if (!controllermode && !paused)
+		{
+			float num4 = 0f;
+			if (gameplay_settings.mouse_movementmode == 0)
+			{
+				Vector3 mousePosition = Input.mousePosition;
+				if (gameplay_settings.mouse_controldirection == 0 || gameplay_settings.mouse_controldirection == 1)
+				{
+					num4 = mousePosition.y / (float)Screen.height;
+				}
+				else if (gameplay_settings.mouse_controldirection == 2 || gameplay_settings.mouse_controldirection == 3)
+				{
+					num4 = mousePosition.x / (float)Screen.width;
+				}
+				if (num4 < 0f)
+				{
+					num4 = 0f;
+				}
+				else if (num4 > 1f)
+				{
+					num4 = 1f;
+				}
+				num4 -= 0.5f;
+				num4 *= mousemult * (gameplay_settings.mouse_sensitivity * 0.2f + 0.8f);
+			}
+			else if (gameplay_settings.mouse_movementmode == 1)
+			{
+				if (gameplay_settings.mouse_controldirection == 0 || gameplay_settings.mouse_controldirection == 1)
+				{
+					mouse_rel_pos += Input.GetAxis("Mouse Y") * 0.01f * gameplay_settings.mouse_sensitivity;
+				}
+				else if (gameplay_settings.mouse_controldirection == 2 || gameplay_settings.mouse_controldirection == 3)
+				{
+					mouse_rel_pos += Input.GetAxis("Mouse X") * 0.01f * gameplay_settings.mouse_sensitivity;
+				}
+				if (mouse_rel_pos < 0f)
+				{
+					mouse_rel_pos = 0f;
+				}
+				else if (mouse_rel_pos > 1f)
+				{
+					mouse_rel_pos = 1f;
+				}
+				num4 = mouse_rel_pos;
+				num4 -= 0.5f;
+			}
+			if (gameplay_settings.mouse_controldirection == 1 || gameplay_settings.mouse_controldirection == 2)
+			{
+				num4 *= -1f;
+			}
+			if (!paused)
+			{
+				puppet_humanc.doPuppetControl(num4 * 2f);
+				if (GlobalVariables.localsave.manual_dance)
+				{
+					if (gameplay_settings.mouse_controldirection == 0 || gameplay_settings.mouse_controldirection == 1)
+					{
+						puppet_humanc.doManualDance(Input.GetAxis("Mouse X") * 1.25f * gameplay_settings.mouse_sensitivity);
+					}
+					else if (gameplay_settings.mouse_controldirection == 2 || gameplay_settings.mouse_controldirection == 3)
+					{
+						puppet_humanc.doManualDance(Input.GetAxis("Mouse Y") * -1.25f * gameplay_settings.mouse_sensitivity);
+					}
+				}
+			}
+			Vector3 vector = new Vector3(zeroxpos, num4 * vsensitivity, 0f);
+			if (vector.y > vbounds + outerbuffer)
+			{
+				vector.y = vbounds + outerbuffer;
+			}
+			else if (vector.y < 0f - vbounds - outerbuffer)
+			{
+				vector.y = 0f - vbounds - outerbuffer;
+			}
+			if (gameplay_settings.mouse_smoothing > 0f)
+			{
+				Vector3 localPosition = pointer.transform.localPosition;
+				float num5 = 0.7f - gameplay_settings.mouse_smoothing * 0.0066f;
+				Vector3 vector2 = (vector - localPosition) * num5;
+				pointer.transform.localPosition = localPosition + vector2 * Mathf.Clamp(Time.deltaTime * 100f, 0f, 1f);
+			}
+			else
+			{
+				pointer.transform.localPosition = new Vector3(zeroxpos, vector.y, 0f);
+			}
+		}
+		if ((!leveleditor && !freeplay && !quitting && !level_finished) || playingineditor)
+		{
+			double num6 = 0.0;
+			if (musictrack.clip != null)
+			{
+				num6 = (float)musictrack.timeSamples / (float)musictrack.clip.frequency;
+			}
+			if (musictrack_status == track_status.waiting_to_start && num6 > 0.0)
+			{
+				musictrack_status = track_status.playing;
+			}
+			else if ((num6 == 0.0 && musictrack_status == track_status.playing) || (num6 >= (double)musictrack_cliplength && musictrack_status == track_status.playing))
+			{
+				musictrack.Stop();
+				musictrack_status = track_status.ended;
+			}
+			if (musictrack_status != track_status.ended)
+			{
+				musictrack_timeelapsed = num6;
+			}
+			float num7 = (float)musictrack_timeelapsed - latency_offset - noteoffset;
+			if (num6 > (double)levelendtime)
+			{
+				if (levelendtime > 0f && !level_finished && !quitting)
+				{
+					level_finished = true;
+					logMessage("====== LEVEL DONE! ======");
+					curtainc.closeCurtain(loadscene: true);
+					if (totalscore < 0)
+					{
+						totalscore = 0;
+					}
+					GlobalVariables.gameplay_scoretotal = totalscore;
+					if (gameplay_settings.acc_autotoot)
+					{
+						maxlevelscore = Mathf.FloorToInt((float)maxlevelscore * 0.5f);
+					}
+					GlobalVariables.gameplay_scoreperc = (float)totalscore / (float)maxlevelscore;
+					logMessage("score percentage: " + GlobalVariables.gameplay_scoreperc + "(" + totalscore + "/" + maxlevelscore + ")");
+					GlobalVariables.gameplay_notescores = new int[5] { scores_F, scores_D, scores_C, scores_B, scores_A };
+				}
+			}
+			else if (num6 <= (double)levelendtime)
+			{
+				updateTimeCounter((float)num6);
+			}
+			if (num6 > (double)tempotimer)
+			{
+				tempotimer = 60f / tempo * (float)(beatnum + 1);
+				beatnum++;
+				timesigcount++;
+				if (timesigcount > beatspermeasure)
+				{
+					timesigcount = 1;
+					bgcontroller.tickbg();
+					if (beatspermeasure == 3)
+					{
+						flashLeftBounds();
+					}
+				}
+				if (beatspermeasure != 3)
+				{
+					flashLeftBounds();
+				}
+			}
+			if (num6 > (double)tempotimerdot)
+			{
+				beatnumdot++;
+				tempotimerdot = 60f / (tempo * 4f) * (float)beatnumdot;
+				animatePlayerDot();
+			}
+			track_xpos_fixedperframe = (double)zeroxpos + (double)num7 * (0.0 - trackmovemult);
+			if (!smooth_scrolling && !paused)
+			{
+				if (musictrack_status != track_status.ended)
+				{
+					noteholderr.anchoredPosition3D = new Vector3((float)track_xpos_fixedperframe, 0f, 0f);
+				}
+				else
+				{
+					syncTrackPositions(num7);
+					smooth_scrolling = true;
+				}
+			}
+			else if (smooth_scrolling && !paused && musictrack_timeelapsed > 0.0)
+			{
+				track_xpos_smoothscrolling -= (double)Time.deltaTime * (trackmovemult * (double)smooth_scrolling_move_mult * (double)smooth_scrolling_mod_mult);
+				noteholderr.anchoredPosition3D = new Vector3((float)track_xpos_smoothscrolling, 0f, 0f);
+				resync_timer += Time.deltaTime;
+				if (resync_timer >= 2f)
+				{
+					if (isResyncNeeded())
+					{
+						resync_timer = 0f;
+						syncTrackPositions(num7);
+					}
+					else
+					{
+						resync_timer = 0f;
+					}
+				}
+			}
+			if (!leveleditor)
+			{
+				if (noteholderr.anchoredPosition3D.x - zeroxpos + allbeatlines[beatlineindex].anchoredPosition3D.x < 0f)
+				{
+					maxbeatlinex += defaultnotelength * beatspermeasure;
+					allbeatlines[beatlineindex].anchoredPosition3D = new Vector3(maxbeatlinex, 0f, 0f);
+					beatlineindex++;
+					if (beatlineindex > numbeatlines - 1)
+					{
+						beatlineindex = 0;
+					}
+				}
+				if (bgindex < bgdata.Count && num7 > bgdata[bgindex][0])
+				{
+					bgcontroller.bgMove((int)bgdata[bgindex][1]);
+					bgindex++;
+				}
+				if (improv_zones != null && improv_zones.Count > 0)
+				{
+					if (!improv_zone_active && Math.Abs(noteholderr.anchoredPosition3D.x) > improv_zone_data[current_improv_zone][0])
+					{
+						played_during_improv_zone = false;
+						improv_zone_active = true;
+						improv_zone_text.transform.localScale = new Vector3(0.001f, 0.001f, 1f);
+						improv_zone_text.SetActive(value: true);
+						LeanTween.scale(improv_zone_text, new Vector3(1f, 1f, 1f), 0.1f).setEaseOutBack().setOnComplete((Action)delegate
+						{
+							LeanTween.scale(improv_zone_text, new Vector3(0.9f, 0.9f, 1f), 60f / tempo).setEaseInOutQuad().setLoopPingPong();
+						});
+					}
+					else if (improv_zone_active && Math.Abs(noteholderr.anchoredPosition3D.x) > improv_zone_data[current_improv_zone][1])
+					{
+						improv_zone_active = false;
+						if (!GlobalVariables.localsettings.mute_crowdsounds)
+						{
+							if (played_during_improv_zone)
+							{
+								sfxrefs.audience_cheer.Play();
+							}
+							else
+							{
+								sfxrefs.audience_boo.Play();
+							}
+						}
+						played_during_improv_zone = false;
+						ParticleSystem.EmissionModule emission = solo_particles.emission;
+						emission.rateOverTime = 0f;
+						solo_particles.Stop();
+						LeanTween.cancel(improv_zone_text);
+						LeanTween.scale(improv_zone_text, new Vector3(0.9f, 0.001f, 1f), 0.25f).setEaseInQuart().setOnComplete((Action)delegate
+						{
+							improv_zone_text.SetActive(value: false);
+						});
+						hideImprovZone(improv_zone_to_hide);
+						if (improv_zone_data.Count > current_improv_zone + 1)
+						{
+							current_improv_zone++;
+							improv_zone_to_hide = improv_zone_objects[current_improv_zone];
+						}
+						else
+						{
+							improv_zone_to_hide = null;
+							improv_zones = null;
+						}
+					}
+				}
+			}
+		}
+		if (!gameplay_settings.acc_autotoot || freeplay)
+		{
+			notebuttonpressed = isNoteButtonPressed();
+			if (gameplay_settings.acc_reverse_tootinput && !paused && !quitting)
+			{
+				notebuttonpressed = !notebuttonpressed;
+			}
+		}
+		if (Input.GetKeyDown(KeyCode.Minus) && !paused)
+		{
+			adjustTrackVolume(-1f);
+		}
+		else if (Input.GetKeyDown(KeyCode.Equals) && !paused)
+		{
+			adjustTrackVolume(1f);
+		}
+		if (!freeplay && currentscore < totalscore)
+		{
+			tallyScore(Time.deltaTime);
+		}
+		float num8 = noteholderr.anchoredPosition3D.x - zeroxpos;
+		num8 = ((!(num8 > 0f)) ? Mathf.Abs(num8) : (-1f));
+		if (!noteactive && !released_button_between_notes && !notebuttonpressed)
+		{
+			released_button_between_notes = true;
+			force_no_gap_gameobject_to_appear = false;
+		}
+		if (!notebuttonpressed)
+		{
+			last_release_timestamp = (float)musictrack_timeelapsed;
+		}
+		if (alllyrics.Count > 0 && num8 >= alllyrics_rects[0].anchoredPosition3D.x + 250f)
+		{
+			alllyrics[0].SetActive(value: false);
+			alllyrics.RemoveAt(0);
+			alllyrics_rects.RemoveAt(0);
+			if (alllyrics.Count > lyric_occlusion_count)
+			{
+				alllyrics[lyric_occlusion_count].SetActive(value: true);
+			}
+		}
+		if (num8 > currentnotestart && !noteactive)
+		{
+			noteactive = true;
+			if (gameplay_settings.acc_autotoot && !freeplay)
+			{
+				notebuttonpressed = true;
+			}
+			currentnotetimestamp = (float)musictrack_timeelapsed;
+			if (currentnotetimestamp - last_release_timestamp <= release_threshold)
+			{
+				last_release_timestamp = 0f;
+				released_during_timing_window = true;
+			}
+			else
+			{
+				released_during_timing_window = false;
+			}
+		}
+		else if (num8 > currentnoteend && noteactive)
+		{
+			bool flag = false;
+			if (currentnoteindex + 1 < leveldata.Count)
+			{
+				float[] array = leveldata[currentnoteindex];
+				if (leveldata[currentnoteindex + 1][0] - (array[0] + array[1]) < minimum_note_gap_size)
+				{
+					flag = true;
+				}
+			}
+			total_length_of_active_notes += leveldata[currentnoteindex][1];
+			if (gameplay_settings.acc_autotoot && !freeplay && !flag)
+			{
+				notebuttonpressed = false;
+			}
+			activateNextNote(currentnoteindex);
+			note_objs_to_destroy.Add(allnotes[currentnoteindex]);
+			noteactive = false;
+			if (!freeplay)
+			{
+				if (released_during_timing_window)
+				{
+					released_button_between_notes = true;
+					force_no_gap_gameobject_to_appear = false;
+					released_during_timing_window = false;
+				}
+				if (!flag)
+				{
+					getScoreAverage();
+				}
+				grabNoteRefs(1);
+			}
+		}
+		if (noteactive && !freeplay && !paused)
+		{
+			float num9 = (currentnoteend - num8) / (currentnoteend - currentnotestart);
+			num9 = Mathf.Abs(1f - num9);
+			float num10 = easeInOutVal(num9, 0f, currentnotepshift, 1f);
+			float num11 = pointerrect.anchoredPosition.y - (currentnotestarty + num10);
+			if (currentnotepshift != 0f)
+			{
+				float t = (Mathf.Clamp(Mathf.Abs(currentnotepshift), 10f, 150f) - 10f) / 140f;
+				float num12 = Mathf.Lerp(0.96f, 0.7f, t);
+				num11 *= num12;
+			}
+			float num13 = 100f - Mathf.Abs(num11);
+			if (num13 < 0f)
+			{
+				num13 = 0f;
+			}
+			else if (num13 >= 99.25f)
+			{
+				num13 = 100f;
+			}
+			if (!noteplaying)
+			{
+				num13 = 0f;
+			}
+			if (num13 == 0f)
+			{
+				notescoretotal += num13;
+				notescoresamples += 0.22f;
+				if (notescoresamples <= 0f)
+				{
+					notescoresamples = 0.22f;
+				}
+				notescoreaverage = notescoretotal / notescoresamples;
+			}
+			else
+			{
+				notescoretotal += num13;
+				notescoresamples += 1f;
+				if (notescoresamples <= 0f)
+				{
+					notescoresamples = 1f;
+				}
+				notescoreaverage = notescoretotal / notescoresamples;
+			}
+		}
+		if (musictrack_status == track_status.ended && !paused && !quitting)
+		{
+			if (GlobalVariables.turbomode)
+			{
+				musictrack_timeelapsed += Time.deltaTime * 2f;
+			}
+			else if (GlobalVariables.practicemode < 1f)
+			{
+				musictrack_timeelapsed += Time.deltaTime * GlobalVariables.practicemode;
+			}
+			else
+			{
+				musictrack_timeelapsed += Time.deltaTime;
+			}
+		}
+		if (Input.GetKey(KeyCode.Escape) && !quitting && musictrack_timeelapsed > 0.5 && !level_finished && pausecontroller.done_animating && !freeplay)
+		{
+			if (Cursor.lockState == CursorLockMode.Locked)
+			{
+				Cursor.lockState = CursorLockMode.Confined;
+			}
+			notebuttonpressed = false;
+			if (musictrack_status != track_status.ended)
+			{
+				musictrack.Pause();
+			}
+			if (custombg_video != null)
+			{
+				custombg_video.Pause();
+			}
+			sfxrefs.backfromfreeplay.Play();
+			puppet_humanc.shaking = false;
+			puppet_humanc.stopParticleEffects();
+			puppet_humanc.playCameraRotationTween(play: false);
+			paused = true;
+			quitting = true;
+			pausecanvas.SetActive(value: true);
+			pausecontroller.showPausePanel();
+			Cursor.visible = true;
+			if (!track_is_pausable)
+			{
+				curtainc.closeCurtain(loadscene: false);
+			}
+		}
+		else if (Input.GetKey(KeyCode.Escape) && !quitting && freeplay && curtainc.doneanimating)
+		{
+			backFromFreeplay();
+		}
+		else if (Input.GetKey(KeyCode.R) && !quitting && musictrack_timeelapsed > 0.5 && !freeplay && !retrying)
+		{
+			if (restarttimer == 0f)
+			{
+				sfxrefs.recordscratch.Play();
+				restart_objects[0].SetActive(value: true);
+				restart_objects[1].SetActive(value: true);
+				LeanTween.cancel(restart_objects[0]);
+				LeanTween.cancel(restart_objects[1]);
+				restart_objects[0].transform.localScale = new Vector3(1f, 0.0001f, 1f);
+				LeanTween.scaleY(restart_objects[0], 1f, 0.2f).setEaseOutBack();
+				restart_objects[1].transform.localScale = new Vector3(0.0001f, 0.0001f, 1f);
+				LeanTween.scale(restart_objects[1], new Vector3(1f, 1f, 1f), 0.2f).setEaseInOutQuart();
+			}
+			restarttimer += Time.deltaTime * 0.65f;
+			restart_circle_fill.fillAmount = restarttimer * 2.5f;
+			restartfader.alpha = restarttimer * 3f;
+			if (restarttimer > 0.4f)
+			{
+				LeanTween.moveLocalY(restart_objects[0], 800f, 0.4f).setEaseInQuart();
+				LeanTween.scale(restart_objects[1], new Vector3(6f, 0.001f, 1f), 0.2f).setEaseInOutQuart();
+				notebuttonpressed = false;
+				if (musictrack_status != track_status.ended)
+				{
+					musictrack.Pause();
+				}
+				sfxrefs.backfromfreeplay.Play();
+				curtainc.closeCurtain(loadscene: true);
+				paused = true;
+				retrying = true;
+				quitting = true;
+			}
+		}
+		else if (!Input.GetKey(KeyCode.R) && restarttimer > 0f && !quitting && !freeplay && !retrying)
+		{
+			restarttimer = 0f;
+			restartfader.alpha = 0f;
+			restart_objects[0].SetActive(value: false);
+			restart_objects[1].SetActive(value: false);
+		}
+		if (notebuttonpressed && !noteplaying && !outofbreath && readytoplay)
+		{
+			noteplaying = true;
+			setPuppetShake(shake: true);
+			currentnotesound.time = 0f;
+			trombvol_current = trombvol_default;
+			currentnotesound.volume = trombvol_current;
+			playNote();
+		}
+		else if (!notebuttonpressed && noteplaying && !autoplay)
+		{
+			noteplaying = false;
+			setPuppetShake(shake: false);
+		}
+		if (!noteplaying)
+		{
+			if (trombvol_current < 0f)
+			{
+				trombvol_current = 0f;
+			}
+			else if (trombvol_current > 0f)
+			{
+				trombvol_current -= Time.deltaTime * 18f;
+			}
+			currentnotesound.volume = trombvol_current;
+		}
+		if (improv_zone_active)
+		{
+			if (noteplaying)
+			{
+				if (!solo_particles.isPlaying)
+				{
+					solo_particles.Play();
+				}
+				ParticleSystem.EmissionModule emission2 = solo_particles.emission;
+				emission2.rateOverTime = 10f;
+				if (!played_during_improv_zone)
+				{
+					played_during_improv_zone = true;
+				}
+			}
+			else if (!noteplaying)
+			{
+				ParticleSystem.EmissionModule emission3 = solo_particles.emission;
+				emission3.rateOverTime = 0f;
+			}
+		}
+		if (noteplaying && !paused)
+		{
+			if (currentnotesound.time > currentnotesound.clip.length - 1.25f)
+			{
+				currentnotesound.time = 1f;
+			}
+			setPitchBend();
+			if (breathcounter < 1f)
+			{
+				breathcounter += Time.deltaTime * 0.22f * breathmultiplier;
+				if (breathcounter > 1f)
+				{
+					breathcounter = 1f;
+					sfxrefs.outofbreath.Play();
+					breathglow.anchoredPosition3D = new Vector3(-380f, 0f, 0f);
+					outofbreath = true;
+					noteplaying = false;
+					setPuppetShake(shake: false);
+					setPuppetBreath(hasbreath: true);
+					stopNote();
+				}
+			}
+		}
+		else if (!noteplaying && !paused && breathcounter > 0f)
+		{
+			float num14 = 1f;
+			if (GlobalVariables.turbomode)
+			{
+				num14 = 2f;
+			}
+			if (!outofbreath)
+			{
+				breathcounter -= Time.deltaTime * 8.5f * num14;
+			}
+			else if (outofbreath)
+			{
+				breathcounter -= Time.deltaTime * 0.29f * num14;
+				float t2 = Mathf.Clamp(breathcounter, 0f, 1f);
+				breathglow.anchoredPosition3D = new Vector3(Mathf.Lerp(breath_offscreenpos, breath_onscreenpos, t2), 0f, 0f);
+			}
+			if (breathcounter < 0f)
+			{
+				breathcounter = 0f;
+				if (outofbreath)
+				{
+					sfxrefs.outofbreath.Stop();
+					outofbreath = false;
+					setPuppetBreath(hasbreath: false);
+				}
+			}
+		}
+		if (!paused && breathcounter >= 0f)
+		{
+			float x2 = 53f - 72f * breathcounter;
+			float num15 = (breathcounter + 0.2f) * (Time.deltaTime * 310f);
+			float num16 = topbreathr.anchoredPosition.y + num15;
+			float y = bottombreathr.anchoredPosition.y - num15;
+			if (num16 > -75f)
+			{
+				num16 = -131f;
+				y = -37f;
+			}
+			topbreathr.anchoredPosition3D = new Vector3(x2, num16, 0f);
+			bottombreathr.anchoredPosition3D = new Vector3(x2, y, 0f);
+		}
+		if (champ_bloom_gameobject.activeSelf)
+		{
+			champ_bloom_rotation += Time.deltaTime;
+			if (champ_bloom_rotation >= 360f)
+			{
+				champ_bloom_rotation = 0f;
+			}
+			for (int num17 = 0; num17 < 4; num17++)
+			{
+				champ_bloom_circles[num17].localEulerAngles = new Vector3(0f, 0f, champ_bloom_rotation * (float)(40 + num17 * 40));
+			}
+		}
+	}
+
+	private void setPitchBend()
+	{
+		float p = (notestartpos - pointer.transform.localPosition.y) * (-1f / 165f);
+		float pitch = Mathf.Clamp(Mathf.Pow(2f, p), 0.5f, 2f);
+		currentnotesound.pitch = pitch;
+	}
+
+	private bool isResyncNeeded()
+	{
+		if (Mathf.Abs(noteholderr.anchoredPosition3D.x - (float)track_xpos_fixedperframe) >= 4f)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	public void resumeTrack()
+	{
+		notebuttonpressed = false;
+		if (musictrack_status != track_status.ended)
+		{
+			musictrack.Play();
+		}
+		if (custombg_video != null)
+		{
+			custombg_video.Play();
+		}
+		puppet_humanc.playCameraRotationTween(play: true);
+		paused = false;
+		quitting = false;
+		Cursor.visible = false;
+		if (GlobalVariables.build_target == "mac" && gameplay_settings.mouse_movementmode == 1)
+		{
+			Cursor.lockState = CursorLockMode.Locked;
+		}
+	}
+
+	private void hideImprovZone(GameObject improvzone)
+	{
+		LeanTween.scaleY(improvzone, 0.001f, 0.15f).setEaseInOutQuart().setOnComplete((Action)delegate
+		{
+			improvzone.SetActive(value: false);
+			improvzone = null;
+		});
+	}
+
+	private bool isNoteButtonPressed()
+	{
+		if (!Input.anyKey || paused || quitting)
+		{
+			num_buttons_held_last_frame = 0;
+			last_input_hash = 0;
+			return false;
+		}
+		bool flag = false;
+		int num = 0;
+		int num2 = 0;
+		if (!gameplay_settings.disable_mouse_tooting)
+		{
+			if (Input.GetMouseButton(0))
+			{
+				num2++;
+				num++;
+			}
+			if (Input.GetMouseButton(1))
+			{
+				num2 += 3;
+				num++;
+			}
+		}
+		for (int i = 0; i < toot_keys.Count; i++)
+		{
+			if (Input.GetKey(toot_keys[i]))
+			{
+				num2 += toot_keys[i].GetHashCode();
+				num++;
+			}
+		}
+		if (num_buttons_held_last_frame > 0 && num > num_buttons_held_last_frame)
+		{
+			flag = false;
+		}
+		else if (num_buttons_held_last_frame > 0 && num == num_buttons_held_last_frame && last_input_hash != num2)
+		{
+			flag = false;
+		}
+		else if (num > 0)
+		{
+			flag = true;
+		}
+		last_input_hash = num2;
+		num_buttons_held_last_frame = num;
+		if (num > 1 && gameplay_settings.multiple_keys_mute)
+		{
+			return false;
+		}
+		if (curtainc.controller_ready_state == 1 && flag && !quitting && !enteringlyrics)
+		{
+			curtainc.controller_ready_state = 2;
+			curtainc.openCurtains();
+			startSong(delayed: false);
+		}
+		return flag;
+	}
+
+	private void adjustTrackVolume(float amt)
+	{
+		musictrack.volume += amt * 0.1f;
+		if (musictrack.volume >= 1f)
+		{
+			musictrack.volume = 1f;
+			return;
+		}
+		if (musictrack.volume <= 0f)
+		{
+			musictrack.volume = 0f;
+			return;
+		}
+		sfxrefs.click.volume = (musictrack.volume + 1f) * 0.25f;
+		sfxrefs.click.Play();
+	}
+
+	public void pauseQuitLevel()
+	{
+		sfxrefs.backfromfreeplay.Play();
+		curtainc.transitionOut();
+	}
+
+	public void pauseRetryLevel()
+	{
+		retrying = true;
+		sfxrefs.backfromfreeplay.Play();
+		curtainc.transitionOut();
+	}
+
+	private void animateOutNote(int noteindex, int performance)
+	{
+		noteendeffect noteendeffect2 = allnoteendeffects[noteparticles_index];
+		if (!noteendeffect2.noteeffect_obj.activeSelf)
+		{
+			noteendeffect2.noteeffect_obj.SetActive(value: true);
+		}
+		LeanTween.cancel(noteendeffect2.burst_obj);
+		LeanTween.cancel(noteendeffect2.drops_obj);
+		LeanTween.cancel(noteendeffect2.combotext_obj);
+		noteendeffect2.noteeffect_rect.anchoredPosition3D = new Vector3(0f, allnotes[noteindex].transform.GetComponent<RectTransform>().anchoredPosition3D.y + allnotes[noteindex].transform.GetChild(1).GetComponent<RectTransform>().anchoredPosition3D.y, 0f);
+		noteendeffect2.burst_particles.Stop();
+		ParticleSystem.MainModule main = noteendeffect2.burst_particles.main;
+		if (performance == 0)
+		{
+			main.startColor = new Color(1f, 0f, 0f, 0.3f);
+		}
+		else if (performance > 3)
+		{
+			ParticleSystem.MinMaxGradient startColor = new ParticleSystem.MinMaxGradient(note_end_rainbow_gradient);
+			startColor.mode = ParticleSystemGradientMode.RandomColor;
+			main.startColor = startColor;
+		}
+		else
+		{
+			main.startColor = new Color(1f, 1f, 1f, 0.3f);
+		}
+		noteendeffect2.burst_particles.Play();
+		noteendeffect2.burst_obj.transform.localScale = new Vector3(0.001f, 0.4f, 1f);
+		noteendeffect2.burst_obj.transform.localEulerAngles = new Vector3(0f, 0f, UnityEngine.Random.Range(0f, 359f));
+		LeanTween.scale(noteendeffect2.burst_obj, new Vector3(0.96f, 0.96f, 1f), 0.25f).setEaseOutQuart();
+		if (performance > 3)
+		{
+			noteendeffect2.burst_img.sprite = noteparticle_images[1];
+			noteendeffect2.burst_canvasg.alpha = 0.95f;
+		}
+		else
+		{
+			noteendeffect2.burst_img.sprite = noteparticle_images[0];
+			noteendeffect2.burst_canvasg.alpha = 0.5f;
+		}
+		LeanTween.alphaCanvas(noteendeffect2.burst_canvasg, 0f, 0.28f).setEaseInOutQuad();
+		noteendeffect2.drops_obj.transform.localScale = new Vector3(0.1f, 0.1f, 1f);
+		noteendeffect2.drops_obj.transform.localEulerAngles = new Vector3(0f, 0f, 0f);
+		noteendeffect2.drops_canvasg.alpha = 0.9f;
+		LeanTween.rotateZ(noteendeffect2.drops_obj, -5f, 0.3f).setEaseInOutQuad();
+		LeanTween.scale(noteendeffect2.drops_obj, new Vector3(0.9f, 0.9f, 1f), 0.2f).setEaseOutQuad();
+		LeanTween.alphaCanvas(noteendeffect2.drops_canvasg, 0f, 0.25f).setDelay(0.05f).setEaseInQuad();
+		noteendeffect2.combotext_obj.transform.localScale = new Vector3(1f, 1f, 1f);
+		LeanTween.scale(noteendeffect2.combotext_obj, new Vector3(0.7f, 0.7f, 1f), 0.5f).setEaseOutQuart();
+		if (multiplier > 0)
+		{
+			noteendeffect2.burst_img.color = new Color(1f, 1f, 1f, 1f);
+			noteendeffect2.combotext_txt_shadow.text = highestcombocounter + "<size=13>x</size>";
+			noteendeffect2.combotext_txt_front.color = new Color(1f, 1f, 1f, 1f);
+			noteendeffect2.combotext_txt_front.text = highestcombocounter + "<size=13>x</size>";
+			noteendeffect2.combotext_rect.anchoredPosition3D = new Vector3(15f, 15f, 0f);
+			noteendeffect2.combotext_rect.localEulerAngles = new Vector3(0f, 0f, -40f);
+			LeanTween.moveLocalY(noteendeffect2.combotext_obj, 45f, 0.5f).setEaseOutQuad();
+			LeanTween.rotateZ(noteendeffect2.combotext_obj, -10f, 0.5f).setEaseOutQuart();
+		}
+		else
+		{
+			switch (performance)
+			{
+			case 0:
+				noteendeffect2.burst_img.color = new Color(1f, 0f, 0f, 1f);
+				noteendeffect2.combotext_txt_shadow.text = "x";
+				noteendeffect2.combotext_txt_front.color = new Color(1f, 0f, 0f, 1f);
+				noteendeffect2.combotext_txt_front.text = "x";
+				break;
+			case 1:
+				noteendeffect2.burst_img.color = new Color(1f, 1f, 1f, 1f);
+				noteendeffect2.combotext_txt_shadow.text = note_end_strings[3];
+				noteendeffect2.combotext_txt_front.color = new Color(1f, 1f, 1f, 1f);
+				noteendeffect2.combotext_txt_front.text = note_end_strings[3];
+				break;
+			case 2:
+				noteendeffect2.burst_img.color = new Color(1f, 1f, 1f, 1f);
+				noteendeffect2.combotext_txt_shadow.text = note_end_strings[2];
+				noteendeffect2.combotext_txt_front.color = new Color(1f, 1f, 1f, 1f);
+				noteendeffect2.combotext_txt_front.text = note_end_strings[2];
+				break;
+			}
+			noteendeffect2.combotext_rect.anchoredPosition3D = new Vector3(15f, -20f, 0f);
+			noteendeffect2.combotext_rect.localEulerAngles = new Vector3(0f, 0f, 40f);
+			LeanTween.moveLocalY(noteendeffect2.combotext_obj, -50f, 0.5f).setEaseOutQuad();
+			LeanTween.rotateZ(noteendeffect2.combotext_obj, 10f, 0.5f).setEaseOutQuart();
+		}
+		LeanTween.moveLocalX(noteendeffect2.combotext_obj, 30f, 0.5f).setEaseOutQuart();
+		LeanTween.scale(noteendeffect2.combotext_obj, new Vector3(1E-05f, 1E-05f, 0f), 0.2f).setEaseInOutQuart().setDelay(0.51f);
+		noteparticles_index++;
+		if (noteparticles_index > 14)
+		{
+			noteparticles_index = 0;
+		}
+		if (note_objs_to_destroy.Count > 0)
+		{
+			GameObject final_note_segment = note_objs_to_destroy[note_objs_to_destroy.Count - 1];
+			LeanTween.scaleY(final_note_segment, 0.0001f, 0.1f).setEaseOutQuart().setOnComplete((Action)delegate
+			{
+				final_note_segment.SetActive(value: false);
+				final_note_segment = null;
+			});
+			for (int num = 0; num < note_objs_to_destroy.Count - 1; num++)
+			{
+				note_objs_to_destroy[num].SetActive(value: false);
+			}
+		}
+		note_objs_to_destroy.Clear();
+	}
+
+	private void flashLeftBounds()
+	{
+		if (!beatless)
+		{
+			if (!GlobalVariables.localsettings.acc_reduceflashing)
+			{
+				LeanTween.cancel(leftboundsglow);
+				leftboundsglow.transform.localScale = new Vector3(9f, 1f, 1f);
+				LeanTween.scaleX(leftboundsglow, 0.01f, 0.23f).setEaseOutQuad();
+			}
+			LeanTween.cancel(healthobj);
+			healthobj.transform.localScale = new Vector3(1.09f, 1.09f, 1f);
+			LeanTween.scale(healthobj, new Vector3(1f, 1f, 1f), 0.14f).setEaseOutQuart();
+		}
+	}
+
+	private void setPuppetBreath(bool hasbreath)
+	{
+		puppet_humanc.outofbreath = hasbreath;
+		puppet_humanc.applyFaceTex();
+	}
+
+	private void setPuppetShake(bool shake)
+	{
+		if (shake)
+		{
+			LeanTween.alphaCanvas(pointerglow, 0.95f, 0.05f);
+		}
+		else
+		{
+			LeanTween.alphaCanvas(pointerglow, 0f, 0.05f);
+		}
+		puppet_humanc.shaking = shake;
+		puppet_humanc.applyFaceTex();
+	}
+
+	private void activateNextNote(int noteindex)
+	{
+		if (beatstoshow < allnotes.Count - 1)
+		{
+			beatstoshow++;
+			allnotes[beatstoshow].SetActive(value: true);
+		}
+	}
+
+	private void playNote()
+	{
+		float num = 9999f;
+		int num2 = 0;
+		for (int i = 0; i < 15; i++)
+		{
+			float num3 = Mathf.Abs(notelinepos[i] - pointer.transform.localPosition.y);
+			if (num3 < num)
+			{
+				num = num3;
+				num2 = i;
+			}
+		}
+		notestartpos = notelinepos[num2];
+		currentnotesound.clip = trombclips.tclips[Mathf.Abs(num2 - 14)];
+		currentnotesound.Play();
+	}
+
+	private void stopNote()
+	{
+		currentnotesound.Stop();
+	}
+
+	public void clickBG1()
+	{
+		clickBG(1);
+	}
+
+	public void clickBG2()
+	{
+		clickBG(2);
+	}
+
+	public void clickBG3()
+	{
+		clickBG(3);
+	}
+
+	public void clickBG4()
+	{
+		clickBG(4);
+	}
+
+	public void clickBG5()
+	{
+		clickBG(5);
+	}
+
+	public void clickBG6()
+	{
+		clickBG(6);
+	}
+
+	public void clickBG7()
+	{
+		clickBG(7);
+	}
+
+	public void clickBG8()
+	{
+		clickBG(8);
+	}
+
+	public void clickBG9()
+	{
+		clickBG(9);
+	}
+
+	public void clickBG10()
+	{
+		clickBG(10);
+	}
+
+	public void clickBG11()
+	{
+		clickBG(11);
+	}
+
+	public void clickBG12()
+	{
+		clickBG(12);
+	}
+
+	public void clickBG13()
+	{
+		clickBG(13);
+	}
+
+	public void clickBGX()
+	{
+		tryToDeleteBGThing();
+	}
+
+	private void getTootKeys()
+	{
+		toot_keys.Clear();
+		for (int i = 0; i < GlobalVariables.localsettings.keyboard_tooting_keys.Length; i++)
+		{
+			if (GlobalVariables.localsettings.keyboard_tooting_keys[i])
+			{
+				toot_keys.Add(GlobalVariables.keyboard_key_keycodes[i]);
+			}
+		}
+	}
+
+	private void aNote(float pos, float duration, string startnote, string endnote)
+	{
+		float num = returnYPos(startnote);
+		float num2 = returnYPos(endnote);
+		float num3 = num2 - num;
+		float[] item = new float[5] { pos, duration, num, num3, num2 };
+		leveldata.Add(item);
+	}
+
+	private float returnYPos(string notename)
+	{
+		notename = notename.ToUpper();
+		int num = 0;
+		switch (notename)
+		{
+		case "C3":
+			num = 0;
+			break;
+		case "B2":
+			num = 1;
+			break;
+		case "A2":
+			num = 2;
+			break;
+		case "G2":
+			num = 3;
+			break;
+		case "F2":
+			num = 4;
+			break;
+		case "E2":
+			num = 5;
+			break;
+		case "D2":
+			num = 6;
+			break;
+		case "C2":
+			num = 7;
+			break;
+		case "B1":
+			num = 8;
+			break;
+		case "A1":
+			num = 9;
+			break;
+		case "G1":
+			num = 10;
+			break;
+		case "F1":
+			num = 11;
+			break;
+		case "E1":
+			num = 12;
+			break;
+		case "D1":
+			num = 13;
+			break;
+		case "C1":
+			num = 14;
+			break;
+		}
+		return notelinepos[num];
+	}
+
+	private void importGameplaySettings()
+	{
+		gameplay_settings.show_calibration_screen = GlobalVariables.localsettings.calibrationscreen;
+		gameplay_settings.multiple_keys_mute = GlobalVariables.localsettings.multiple_keys_mutes;
+		gameplay_settings.timing_adjustment = (float)GlobalVariables.localsettings.latencyadjust * 0.001f;
+		gameplay_settings.mouse_movementmode = GlobalVariables.localsettings.mouse_movementmode;
+		gameplay_settings.mouse_controldirection = GlobalVariables.localsettings.mousecontrolmode;
+		gameplay_settings.mouse_sensitivity = GlobalVariables.localsettings.sensitivity;
+		gameplay_settings.mouse_smoothing = GlobalVariables.localsettings.mouse_smoothing;
+		gameplay_settings.scroll_mode = GlobalVariables.localsettings.scroll_mode;
+		gameplay_settings.acc_autotoot = GlobalVariables.localsettings.acc_autotoot;
+		gameplay_settings.acc_reverse_tootinput = GlobalVariables.localsettings.acc_reversetootinput;
+		gameplay_settings.disable_mouse_tooting = GlobalVariables.localsettings.disable_mouse_tooting;
+	}
+}
